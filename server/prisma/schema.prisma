@@ -1,0 +1,154 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  NATIONAL_ADMIN
+  STATE_MANAGER
+  AREA_MANAGER
+  COORDINATOR
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+}
+
+model Company {
+  id     String @id @default(cuid())
+  code   String @unique
+  name   String
+  status Status @default(ACTIVE)
+
+  locations Location[]
+  users     User[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Location {
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  state        String
+  district     String
+  city         String
+  locationName String
+
+  status Status @default(ACTIVE)
+
+  users     User[]
+  headCount HeadCountCurrent?
+  history   HeadCountHistory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id String @id @default(cuid())
+
+  employeeCode String? @unique
+
+  fullName String
+
+  email String @unique
+
+  password String
+
+  mobile String?
+
+  role UserRole
+
+  status Status @default(ACTIVE)
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id])
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  auditLogs AuditLog[]
+}
+
+model HeadCountCurrent {
+  id String @id @default(cuid())
+
+  locationId String @unique
+
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  requirement Int @default(0)
+
+  filled Int @default(0)
+
+  variation Int @default(0)
+
+  updatedById String?
+
+  updatedAt DateTime @updatedAt
+}
+
+model HeadCountHistory {
+  id String @id @default(cuid())
+
+  locationId String
+
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  requirement Int
+
+  filled Int
+
+  variation Int
+
+  updatedBy String
+
+  remarks String?
+
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id String @id @default(cuid())
+
+  title String
+
+  message String
+
+  isRead Boolean @default(false)
+
+  userId String?
+
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  action String
+
+  module String
+
+  description String
+
+  userId String
+
+  user User @relation(fields: [userId], references: [id])
+
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+}
