@@ -307,7 +307,7 @@ export default function CoordinatorForm() {
               </h1>
               <p className="text-xs text-gray-500 hidden sm:block">Submit head count updates for your locations</p>
             </div>
-          </div>a
+          </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-200">
               <Clock className="w-4 h-4 text-blue-500" />
