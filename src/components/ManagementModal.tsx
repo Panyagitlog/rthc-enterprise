@@ -1,30 +1,39 @@
 // src/components/ManagementModal.tsx
-import { useState, useEffect } from 'react';
-import { X, Plus, Edit, Trash2, Save, RefreshCw, Search } from 'lucide-react';
-import { supabase } from '../services/supabase';
-import toast from 'react-hot-toast';
+import { useState, useEffect } from "react";
+import {
+  X, Plus, Edit, Trash2, Save, RefreshCw, Search,
+  Building2, MapPin, Users, Loader2, ChevronDown,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { supabase } from "../services/supabase";
+import toast from "react-hot-toast";
 
+// ---------- Types (matching actual DB schema) ----------
 interface Company {
   id: string;
   company_name: string;
-  code?: string;
+  company_code?: string;
   contact_person?: string;
   email?: string;
-  phone?: string;
+  mobile?: string;
+  address?: string;
+  city?: string;
   state?: string;
   status?: string;
 }
 
 interface Location {
   id: string;
-  location_name: string;
   company_id: string;
+  location_name: string;
+  location_code?: string;
   address?: string;
+  city?: string;
   state?: string;
-  coordinator_id?: string;
+  contact_person?: string;
+  mobile?: string;
   status?: string;
   company?: Company;
-  coordinator?: Coordinator;
 }
 
 interface Coordinator {
@@ -40,7 +49,7 @@ interface Coordinator {
   location?: Location;
 }
 
-type Tab = 'companies' | 'locations' | 'coordinators';
+type Tab = "companies" | "locations" | "coordinators";
 
 interface ManagementModalProps {
   isOpen: boolean;
@@ -50,460 +59,577 @@ interface ManagementModalProps {
   darkMode?: boolean;
 }
 
+// ---------- Animation Variants ----------
+const overlayVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1 },
+};
+
+const modalVariants = {
+  hidden: { opacity: 0, scale: 0.95, y: 20 },
+  visible: { opacity: 1, scale: 1, y: 0, transition: { type: "spring", damping: 25, stiffness: 300 } },
+  exit: { opacity: 0, scale: 0.95, y: 20, transition: { duration: 0.2 } },
+};
+
+// ---------- Status Badge ----------
+const StatusBadge = ({ status }: { status?: string }) => {
+  const isActive = status === "ACTIVE";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+        isActive
+          ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800"
+          : "bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-600"
+      }`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-400"}`} />
+      {status || "INACTIVE"}
+    </span>
+  );
+};
+
+// ---------- Main Component ----------
 export default function ManagementModal({
   isOpen,
   onClose,
-  initialTab = 'companies',
+  initialTab = "companies",
   onDataChange,
   darkMode = false,
 }: ManagementModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [coordinators, setCoordinators] = useState<Coordinator[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-
+  const [searchTerm, setSearchTerm] = useState("");
   const [editingItem, setEditingItem] = useState<any>(null);
   const [formData, setFormData] = useState<Record<string, any>>({});
 
+  // ---------- Fetch Data ----------
   const fetchData = async () => {
     setLoading(true);
     try {
-      if (activeTab === 'companies') {
-        const { data } = await supabase.from('companies').select('*').order('company_name');
+      if (activeTab === "companies") {
+        const { data } = await supabase
+          .from("companies")
+          .select("*")
+          .order("company_name");
         setCompanies(data || []);
-      } else if (activeTab === 'locations') {
+      } else if (activeTab === "locations") {
         const { data } = await supabase
-          .from('locations')
-          .select('*, company:companies(company_name), coordinator:users(id, name)')
-          .order('location_name');
+          .from("locations")
+          .select("*, company:companies(company_name)")
+          .order("location_name");
         setLocations(data || []);
-      } else if (activeTab === 'coordinators') {
+      } else if (activeTab === "coordinators") {
         const { data } = await supabase
-          .from('users')
-          .select('id, name, email, phone, company_id, location_id, role, status')
-          .eq('role', 'COORDINATOR')
-          .order('name');
+          .from("users")
+          .select("id, name, email, phone, company_id, location_id, role, status")
+          .eq("role", "COORDINATOR")
+          .order("name");
         setCoordinators(data || []);
       }
-    } catch (error: any) {
-      toast.error('Failed to load data');
+    } catch {
+      toast.error("Failed to load data");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (isOpen) {
-      fetchData();
-    }
+    if (isOpen) fetchData();
   }, [isOpen, activeTab]);
 
   useEffect(() => {
     setEditingItem(null);
     setFormData({});
+    setSearchTerm("");
   }, [activeTab]);
 
+  // ---------- CRUD Handlers ----------
   const handleAdd = () => {
     setEditingItem({ id: null });
-    setFormData({});
+    setFormData({ status: "ACTIVE" });
   };
 
   const handleEdit = (item: any) => {
     setEditingItem(item);
-    setFormData(item);
+    setFormData({ ...item });
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this record?')) return;
+    if (!confirm("Are you sure you want to delete this record?")) return;
     try {
-      let table = activeTab === 'companies' ? 'companies' : activeTab === 'locations' ? 'locations' : 'users';
-      const { error } = await supabase.from(table).delete().eq('id', id);
+      const table = activeTab === "companies" ? "companies" : activeTab === "locations" ? "locations" : "users";
+      const { error } = await supabase.from(table).delete().eq("id", id);
       if (error) throw error;
-      toast.success('Deleted successfully');
+      toast.success("Deleted successfully");
       fetchData();
-      if (onDataChange) onDataChange();
+      onDataChange?.();
     } catch (error: any) {
       toast.error(error.message);
     }
   };
 
   const handleSave = async () => {
+    setSaving(true);
     try {
-      let table = activeTab === 'companies' ? 'companies' : activeTab === 'locations' ? 'locations' : 'users';
+      const table = activeTab === "companies" ? "companies" : activeTab === "locations" ? "locations" : "users";
       const isEdit = editingItem?.id;
-      let payload = { ...formData };
-      if (activeTab === 'coordinators') {
-        payload.role = 'COORDINATOR';
-        // If password is provided and it's a new user, you might need to handle auth creation separately
-        // For simplicity, we'll just store the user profile
-        if (payload.password && !isEdit) {
-          // Optionally create auth user here (omitted for brevity)
-        }
-        delete payload.password; // remove password from payload after potential use
+      const payload = { ...formData };
+
+      // Remove fields that don't belong in the table
+      if (activeTab === "coordinators") {
+        payload.role = "COORDINATOR";
+        delete payload.password;
+        delete payload.company;
+        delete payload.location;
       }
+      if (activeTab === "locations") {
+        delete payload.company;
+      }
+
+      // Clean undefined values
+      Object.keys(payload).forEach((key) => {
+        if (payload[key] === undefined) delete payload[key];
+      });
+
       let result;
       if (isEdit) {
-        result = await supabase.from(table).update(payload).eq('id', editingItem.id);
+        result = await supabase.from(table).update(payload).eq("id", editingItem.id);
       } else {
         result = await supabase.from(table).insert([payload]);
       }
       if (result.error) throw result.error;
-      toast.success(isEdit ? 'Updated successfully' : 'Added successfully');
+
+      toast.success(isEdit ? "Updated successfully" : "Added successfully");
       setEditingItem(null);
       setFormData({});
       fetchData();
-      if (onDataChange) onDataChange();
+      onDataChange?.();
     } catch (error: any) {
       toast.error(error.message);
+    } finally {
+      setSaving(false);
     }
   };
 
-  const renderForm = () => {
-    if (!editingItem) return null;
-
-    const fields =
-      activeTab === 'companies'
-        ? [
-            { key: 'company_name', label: 'Company Name', type: 'text', required: true },
-            { key: 'code', label: 'Code', type: 'text' },
-            { key: 'contact_person', label: 'Contact Person', type: 'text' },
-            { key: 'email', label: 'Email', type: 'email' },
-            { key: 'phone', label: 'Phone', type: 'text' },
-            { key: 'state', label: 'State', type: 'text' },
-            { key: 'status', label: 'Status', type: 'select', options: ['Active', 'Inactive'] },
-          ]
-        : activeTab === 'locations'
-        ? [
-            { key: 'location_name', label: 'Location Name', type: 'text', required: true },
-            {
-              key: 'company_id',
-              label: 'Company',
-              type: 'select',
-              options: companies.map((c) => ({ value: c.id, label: c.company_name })),
-              required: true,
-            },
-            { key: 'address', label: 'Address', type: 'text' },
-            { key: 'state', label: 'State', type: 'text' },
-            {
-              key: 'coordinator_id',
-              label: 'Coordinator',
-              type: 'select',
-              options: coordinators.map((c) => ({ value: c.id, label: c.name })),
-            },
-            { key: 'status', label: 'Status', type: 'select', options: ['Active', 'Inactive'] },
-          ]
-        : [
-            { key: 'name', label: 'Full Name', type: 'text', required: true },
-            { key: 'email', label: 'Email', type: 'email', required: true },
-            { key: 'phone', label: 'Phone', type: 'text' },
-            {
-              key: 'company_id',
-              label: 'Company',
-              type: 'select',
-              options: companies.map((c) => ({ value: c.id, label: c.company_name })),
-              required: true,
-            },
-            {
-              key: 'location_id',
-              label: 'Location',
-              type: 'select',
-              options: locations.map((l) => ({ value: l.id, label: l.location_name })),
-            },
-            { key: 'status', label: 'Status', type: 'select', options: ['Active', 'Inactive'] },
-            {
-              key: 'password',
-              label: 'Password',
-              type: 'password',
-              required: !editingItem.id,
-            },
-          ];
-
-    return (
-      <div className={`mt-4 p-4 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-        <h4 className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'} mb-3`}>
-          {editingItem.id ? 'Edit' : 'Add'} {activeTab.slice(0, -1)}
-        </h4>
-        <div className="grid grid-cols-2 gap-3">
-          {fields.map((field) => (
-            <div key={field.key} className={field.key === 'remarks' ? 'col-span-2' : ''}>
-              <label className={`block text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                {field.label} {field.required && <span className="text-red-500">*</span>}
-              </label>
-              {field.type === 'select' ? (
-                <select
-                  value={formData[field.key] || ''}
-                  onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
-                  className={`mt-1 block w-full border rounded-md text-sm py-1.5 px-2 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-                >
-                  <option value="">Select...</option>
-                  {field.options.map((opt: any) => (
-                    <option key={opt.value || opt} value={opt.value || opt}>
-                      {opt.label || opt}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type={field.type}
-                  value={formData[field.key] || ''}
-                  onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
-                  className={`mt-1 block w-full border rounded-md text-sm py-1.5 px-2 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            onClick={() => setEditingItem(null)}
-            className={`px-3 py-1.5 text-sm border rounded-md ${darkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'hover:bg-gray-50'}`}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-1"
-          >
-            <Save className="w-4 h-4" /> {editingItem.id ? 'Update' : 'Add'}
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  // Filter data for table
-  const filteredData = () => {
+  // ---------- Filtered Data ----------
+  const filteredData = (): any[] => {
     const term = searchTerm.toLowerCase().trim();
-    if (!term) {
-      if (activeTab === 'companies') return companies;
-      if (activeTab === 'locations') return locations;
-      return coordinators;
-    }
-    if (activeTab === 'companies') {
-      return companies.filter(c =>
-        c.company_name.toLowerCase().includes(term) ||
-        c.code?.toLowerCase().includes(term) ||
-        c.contact_person?.toLowerCase().includes(term)
+    const source = activeTab === "companies" ? companies : activeTab === "locations" ? locations : coordinators;
+    if (!term) return source;
+
+    if (activeTab === "companies") {
+      return companies.filter(
+        (c) =>
+          c.company_name.toLowerCase().includes(term) ||
+          c.company_code?.toLowerCase().includes(term) ||
+          c.contact_person?.toLowerCase().includes(term) ||
+          c.email?.toLowerCase().includes(term) ||
+          c.city?.toLowerCase().includes(term)
       );
-    } else if (activeTab === 'locations') {
-      return locations.filter(l =>
-        l.location_name.toLowerCase().includes(term) ||
-        l.company?.company_name?.toLowerCase().includes(term) ||
-        l.address?.toLowerCase().includes(term)
+    } else if (activeTab === "locations") {
+      return locations.filter(
+        (l) =>
+          l.location_name.toLowerCase().includes(term) ||
+          l.company?.company_name?.toLowerCase().includes(term) ||
+          l.city?.toLowerCase().includes(term) ||
+          l.location_code?.toLowerCase().includes(term)
       );
     } else {
-      return coordinators.filter(u =>
-        u.name.toLowerCase().includes(term) ||
-        u.email.toLowerCase().includes(term) ||
-        u.phone?.toLowerCase().includes(term) ||
-        u.company?.company_name?.toLowerCase().includes(term)
+      return coordinators.filter(
+        (u) =>
+          u.name.toLowerCase().includes(term) ||
+          u.email.toLowerCase().includes(term) ||
+          u.phone?.toLowerCase().includes(term)
       );
     }
   };
 
   const filteredItems = filteredData();
+  const tabs: Tab[] = ["companies", "locations", "coordinators"];
+  const tabIcons = { companies: Building2, locations: MapPin, coordinators: Users };
 
+  // ---------- Form Field Definitions (matching DB schema) ----------
+  const formFields = (): { key: string; label: string; type: string; required?: boolean; options?: any[] }[] => {
+    if (activeTab === "companies") {
+      return [
+        { key: "company_name", label: "Company Name", type: "text", required: true },
+        { key: "company_code", label: "Company Code", type: "text" },
+        { key: "contact_person", label: "Contact Person", type: "text" },
+        { key: "email", label: "Email", type: "email" },
+        { key: "mobile", label: "Mobile", type: "text" },
+        { key: "address", label: "Address", type: "text" },
+        { key: "city", label: "City", type: "text" },
+        { key: "state", label: "State", type: "text" },
+        {
+          key: "status",
+          label: "Status",
+          type: "select",
+          options: ["ACTIVE", "INACTIVE"],
+        },
+      ];
+    } else if (activeTab === "locations") {
+      return [
+        { key: "location_name", label: "Location Name", type: "text", required: true },
+        { key: "location_code", label: "Location Code", type: "text" },
+        {
+          key: "company_id",
+          label: "Company",
+          type: "select",
+          required: true,
+          options: companies.map((c) => ({ value: c.id, label: c.company_name })),
+        },
+        { key: "address", label: "Address", type: "text" },
+        { key: "city", label: "City", type: "text" },
+        { key: "state", label: "State", type: "text" },
+        { key: "contact_person", label: "Contact Person", type: "text" },
+        { key: "mobile", label: "Mobile", type: "text" },
+        {
+          key: "status",
+          label: "Status",
+          type: "select",
+          options: ["ACTIVE", "INACTIVE"],
+        },
+      ];
+    } else {
+      return [
+        { key: "name", label: "Full Name", type: "text", required: true },
+        { key: "email", label: "Email", type: "email", required: true },
+        { key: "phone", label: "Phone", type: "text" },
+        {
+          key: "company_id",
+          label: "Company",
+          type: "select",
+          required: true,
+          options: companies.map((c) => ({ value: c.id, label: c.company_name })),
+        },
+        {
+          key: "location_id",
+          label: "Location",
+          type: "select",
+          options: locations.map((l) => ({ value: l.id, label: l.location_name })),
+        },
+        {
+          key: "status",
+          label: "Status",
+          type: "select",
+          options: ["ACTIVE", "INACTIVE"],
+        },
+        {
+          key: "password",
+          label: "Password",
+          type: "password",
+          required: !editingItem?.id,
+        },
+      ];
+    }
+  };
+
+  // ---------- Table Columns ----------
+  const tableColumns = (): { key: string; label: string; className?: string }[] => {
+    if (activeTab === "companies") {
+      return [
+        { key: "company_name", label: "Name" },
+        { key: "company_code", label: "Code" },
+        { key: "contact_person", label: "Contact" },
+        { key: "email", label: "Email" },
+        { key: "mobile", label: "Mobile" },
+        { key: "city", label: "City" },
+        { key: "state", label: "State" },
+        { key: "status", label: "Status" },
+      ];
+    } else if (activeTab === "locations") {
+      return [
+        { key: "location_name", label: "Name" },
+        { key: "location_code", label: "Code" },
+        { key: "company", label: "Company" },
+        { key: "city", label: "City" },
+        { key: "state", label: "State" },
+        { key: "status", label: "Status" },
+      ];
+    } else {
+      return [
+        { key: "name", label: "Name" },
+        { key: "email", label: "Email" },
+        { key: "phone", label: "Phone" },
+        { key: "company_id", label: "Company" },
+        { key: "location_id", label: "Location" },
+        { key: "status", label: "Status" },
+      ];
+    }
+  };
+
+  // ---------- Render Cell ----------
+  const renderCell = (item: any, col: { key: string; label: string }) => {
+    if (col.key === "status") {
+      return <StatusBadge status={item.status} />;
+    }
+    if (col.key === "company" && activeTab === "locations") {
+      return item.company?.company_name || "—";
+    }
+    if (col.key === "company_id" && activeTab === "coordinators") {
+      return companies.find((c) => c.id === item.company_id)?.company_name || "—";
+    }
+    if (col.key === "location_id" && activeTab === "coordinators") {
+      return locations.find((l) => l.id === item.location_id)?.location_name || "—";
+    }
+    return item[col.key] || "—";
+  };
+
+  const columns = tableColumns();
+
+  // ---------- JSX ----------
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className={`bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col ${darkMode ? 'bg-gray-800' : ''}`}>
-        <div className={`flex items-center justify-between px-6 py-4 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-          <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Management</h2>
-          <button onClick={onClose} className={`p-1 rounded-full transition-colors ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}>
-            <X className={`w-5 h-5 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`} />
-          </button>
-        </div>
-
-        <div className={`border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'} px-6`}>
-          <nav className="-mb-px flex space-x-6">
-            {(['companies', 'locations', 'coordinators'] as Tab[]).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`py-2 px-1 border-b-2 text-sm font-medium capitalize ${
-                  activeTab === tab
-                    ? 'border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400'
-                    : `border-transparent ${darkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-500 hover:text-gray-700'}`
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </nav>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
-            <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              {loading ? 'Loading...' : `${activeTab.slice(0, -1)} management`}
-            </span>
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="relative">
-                <Search className={`absolute left-2.5 top-2.5 w-4 h-4 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className={`pl-8 pr-3 py-1.5 border rounded-md text-sm ${darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300'}`}
-                />
-              </div>
-              <button
-                onClick={fetchData}
-                className={`p-1.5 border rounded-md ${darkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'hover:bg-gray-50'}`}
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleAdd}
-                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
-              >
-                <Plus className="w-4 h-4" /> Add
-              </button>
-            </div>
+    <AnimatePresence>
+      <motion.div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+        variants={overlayVariants}
+        initial="hidden"
+        animate="visible"
+        exit="hidden"
+      >
+        <motion.div
+          variants={modalVariants}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col border border-slate-200/60 dark:border-slate-700/50 overflow-hidden"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200/60 dark:border-slate-700/50 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
+            <h2 className="text-lg font-display font-bold text-slate-900 dark:text-white">
+              Enterprise Management
+            </h2>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
 
-          {loading ? (
-            <div className={`text-center py-8 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Loading...</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-50'}>
-                  <tr>
-                    {activeTab === 'companies' && (
-                      <>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Name</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Code</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Contact</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">State</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Status</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">Actions</th>
-                      </>
-                    )}
-                    {activeTab === 'locations' && (
-                      <>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Name</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Company</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Coordinator</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">State</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Status</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">Actions</th>
-                      </>
-                    )}
-                    {activeTab === 'coordinators' && (
-                      <>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Name</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Email</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Phone</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Company</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Location</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Status</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">Actions</th>
-                      </>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
-                  {activeTab === 'companies' &&
-                    filteredItems.map((c: Company) => (
-                      <tr key={c.id}>
-                        <td className={`px-3 py-2 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>{c.company_name}</td>
-                        <td className={`px-3 py-2 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>{c.code || '-'}</td>
-                        <td className={`px-3 py-2 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>{c.contact_person || '-'}</td>
-                        <td className={`px-3 py-2 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>{c.state || '-'}</td>
-                        <td className="px-3 py-2 text-sm">
-                          <span className={`px-2 py-0.5 text-xs rounded-full ${
-                            c.status === 'Active'
-                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                              : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-                          }`}>
-                            {c.status || 'Active'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-right text-sm">
-                          <button onClick={() => handleEdit(c)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 mr-2">
-                            <Edit className="w-4 h-4 inline" />
-                          </button>
-                          <button onClick={() => handleDelete(c.id)} className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
-                            <Trash2 className="w-4 h-4 inline" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  {activeTab === 'locations' &&
-                    filteredItems.map((l: Location) => (
-                      <tr key={l.id}>
-                        <td className={`px-3 py-2 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>{l.location_name}</td>
-                        <td className={`px-3 py-2 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>{l.company?.company_name || '-'}</td>
-                        <td className={`px-3 py-2 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>{l.coordinator?.name || '-'}</td>
-                        <td className={`px-3 py-2 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>{l.state || '-'}</td>
-                        <td className="px-3 py-2 text-sm">
-                          <span className={`px-2 py-0.5 text-xs rounded-full ${
-                            l.status === 'Active'
-                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                              : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-                          }`}>
-                            {l.status || 'Active'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-right text-sm">
-                          <button onClick={() => handleEdit(l)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 mr-2">
-                            <Edit className="w-4 h-4 inline" />
-                          </button>
-                          <button onClick={() => handleDelete(l.id)} className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
-                            <Trash2 className="w-4 h-4 inline" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  {activeTab === 'coordinators' &&
-                    filteredItems.map((u: Coordinator) => (
-                      <tr key={u.id}>
-                        <td className={`px-3 py-2 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>{u.name}</td>
-                        <td className={`px-3 py-2 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>{u.email}</td>
-                        <td className={`px-3 py-2 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>{u.phone || '-'}</td>
-                        <td className={`px-3 py-2 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>
-                          {companies.find(c => c.id === u.company_id)?.company_name || '-'}
-                        </td>
-                        <td className={`px-3 py-2 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>
-                          {locations.find(l => l.id === u.location_id)?.location_name || '-'}
-                        </td>
-                        <td className="px-3 py-2 text-sm">
-                          <span className={`px-2 py-0.5 text-xs rounded-full ${
-                            u.status === 'Active'
-                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                              : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-                          }`}>
-                            {u.status || 'Active'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-right text-sm">
-                          <button onClick={() => handleEdit(u)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 mr-2">
-                            <Edit className="w-4 h-4 inline" />
-                          </button>
-                          <button onClick={() => handleDelete(u.id)} className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
-                            <Trash2 className="w-4 h-4 inline" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  {filteredItems.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className={`text-center py-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        No records found
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+          {/* Tabs */}
+          <div className="border-b border-slate-200/60 dark:border-slate-700/50 px-6 bg-slate-50/50 dark:bg-slate-900/50">
+            <nav className="flex space-x-1">
+              {tabs.map((tab) => {
+                const Icon = tabIcons[tab];
+                const isActive = activeTab === tab;
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium capitalize border-b-2 transition-all ${
+                      isActive
+                        ? "border-indigo-500 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400"
+                        : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {tab}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {/* Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-sm text-slate-500 dark:text-slate-400">
+                {loading ? "Loading..." : `${filteredItems.length} ${activeTab}`}
+              </span>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder={`Search ${activeTab}...`}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-48"
+                  />
+                </div>
+                <button
+                  onClick={fetchData}
+                  className="p-2 rounded-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"
+                  title="Refresh"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleAdd}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-lg shadow-indigo-500/25 transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add {activeTab.slice(0, -1)}
+                </button>
+              </div>
             </div>
-          )}
-          {renderForm()}
-        </div>
-      </div>
-    </div>
+
+            {/* Table */}
+            {loading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-200/60 dark:border-slate-700/50">
+                <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+                  <thead className="bg-slate-50 dark:bg-slate-900/50">
+                    <tr>
+                      {columns.map((col) => (
+                        <th
+                          key={col.key}
+                          className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
+                        >
+                          {col.label}
+                        </th>
+                      ))}
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-24">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50 bg-white dark:bg-slate-800">
+                    {filteredItems.map((item: any) => (
+                      <tr
+                        key={item.id}
+                        className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                      >
+                        {columns.map((col) => (
+                          <td
+                            key={col.key}
+                            className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300 max-w-[200px] truncate"
+                          >
+                            {renderCell(item, col)}
+                          </td>
+                        ))}
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleEdit(item)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+                              title="Edit"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(item.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredItems.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={columns.length + 1}
+                          className="px-4 py-12 text-center text-slate-400 dark:text-slate-500"
+                        >
+                          <div className="flex flex-col items-center gap-2">
+                            <Search className="w-8 h-8 opacity-50" />
+                            <span>No {activeTab} found</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Edit/Add Form */}
+            <AnimatePresence>
+              {editingItem && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="border border-indigo-200 dark:border-indigo-700 rounded-xl bg-indigo-50/50 dark:bg-indigo-900/10 p-5 mt-4">
+                    <h4 className="text-sm font-display font-semibold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
+                      {editingItem.id ? (
+                        <>
+                          <Edit className="w-4 h-4 text-indigo-500" /> Edit {activeTab.slice(0, -1)}
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 text-indigo-500" /> Add {activeTab.slice(0, -1)}
+                        </>
+                      )}
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {formFields().map((field) => (
+                        <div key={field.key} className={field.type === "address" ? "sm:col-span-2 lg:col-span-3" : ""}>
+                          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                            {field.label}
+                            {field.required && <span className="text-rose-500 ml-0.5">*</span>}
+                          </label>
+                          {field.type === "select" ? (
+                            <select
+                              value={formData[field.key] || ""}
+                              onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
+                              className="w-full border border-slate-200 dark:border-slate-600 rounded-lg text-sm py-2 px-3 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            >
+                              <option value="">Select...</option>
+                              {field.options?.map((opt: any) => (
+                                <option key={opt.value || opt} value={opt.value || opt}>
+                                  {opt.label || opt}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type={field.type}
+                              value={formData[field.key] || ""}
+                              onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
+                              placeholder={`Enter ${field.label.toLowerCase()}`}
+                              className="w-full border border-slate-200 dark:border-slate-600 rounded-lg text-sm py-2 px-3 bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-5 flex justify-end gap-2 pt-4 border-t border-slate-200/60 dark:border-slate-700/50">
+                      <button
+                        onClick={() => setEditingItem(null)}
+                        className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-lg shadow-indigo-500/25 disabled:opacity-50 transition-all"
+                      >
+                        {saving ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" /> Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4" /> {editingItem?.id ? "Update" : "Save"}
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 }

@@ -4,6 +4,38 @@
    RTHC Design Tokens — Phase 1 §15/§20, Phase 3 dark-mode table
    Single source of truth. Components consume these, never raw hex.
    ============================================================ */
+.btn-3d {
+  background: linear-gradient(to bottom, #6366f1, #4338ca);
+  color: white;
+  font-weight: 500;
+  padding: 0.75rem 2rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 8px 0 #3730a3, 0 8px 20px rgba(99, 102, 241, 0.4);
+  transition: all 0.15s ease;
+  transform: translateY(0);
+}
+
+.btn-3d:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 0 #3730a3, 0 12px 30px rgba(99, 102, 241, 0.5);
+}
+
+.btn-3d:active {
+  transform: translateY(4px);
+  box-shadow: 0 0px 0 #3730a3, 0 8px 20px rgba(99, 102, 241, 0.3);
+}
+
+.btn-3d:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none !important;
+  transform: translateY(0) !important;
+}
+
+
+body {
+  background: linear-gradient(135deg, var(--color-canvas) 0%, rgba(129, 140, 248, 0.05) 100%);
+}
 
 :root {
   /* Canvas / surfaces */
@@ -163,4 +195,20 @@ body {
   color: var(--color-text-primary);
   font-family: var(--font-sans);
   font-size: 13px;
+}
+/* Let the 3D canvas be visible */
+html, body, #root {
+  background: transparent !important;
+}
+
+/* Ensure all content panels have their own background */
+.dashboard-card,
+.bg-white,
+.bg-card,
+header,
+aside,
+main,
+.bg-canvas {
+  /* already defined by your design tokens, but explicitly: */
+  background-color: var(--color-card, #FFFFFF) !important;
 }
