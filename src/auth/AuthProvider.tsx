@@ -1,9 +1,10 @@
 import { createContext, useContext, useEffect, useState } from "react";
+// @ts-ignore
 import { supabase } from "../services/supabase";
 
-const AuthContext = createContext();
+const AuthContext = createContext<any>(undefined);
 
-export function AuthProvider({ children }) {
+export function AuthProvider({ children }: { children: any }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -43,7 +44,7 @@ export function AuthProvider({ children }) {
       value={{
         user,
         profile,
-        role: profile?.role,
+        role: (profile as any)?.role,
         loading,
       }}
     >

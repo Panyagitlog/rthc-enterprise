@@ -45,14 +45,14 @@ export default function QuickActionsPanel({
   ];
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="rounded-[24px] border border-slate-200/80 bg-white/80 p-4 shadow-[0_18px_60px_-28px_rgba(15,23,42,0.28)] backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/80">
       <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Quick Actions</h3>
       <div className="grid grid-cols-2 gap-2">
         {actions.map((a) => (
           <button
             key={a.label}
             onClick={a.onClick}
-            className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-xs font-medium transition-colors ${TONE_MAP[a.tone]}`}
+            className={`flex items-center justify-center gap-1.5 rounded-2xl px-3 py-2.5 text-xs font-semibold transition-all hover:-translate-y-0.5 ${TONE_MAP[a.tone]}`}
           >
             <a.icon className="h-3.5 w-3.5" />
             {a.label}

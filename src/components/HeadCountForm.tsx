@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import api from "../lib/api";
-import LocationSelect from "./LocationSelect";
+import LocationSelectComponent from "./LocationSelectComponent";
 
 export default function HeadCountForm() {
   const [locationId, setLocationId] = useState("");
@@ -70,7 +70,7 @@ export default function HeadCountForm() {
 
       <label>Location</label>
 
-      <LocationSelect onSelect={setLocationId} />
+      <LocationSelectComponent onSelect={setLocationId} />
 
       <label>Requirement</label>
 

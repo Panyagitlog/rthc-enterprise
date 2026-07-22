@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  ArrowLeft, Printer, Building2, MapPin, Users, UserCheck, UserX,
+  ArrowLeft, Printer, Building2, MapPin, Users,
   TrendingUp, Percent, BarChart3, PieChart, Activity
 } from "lucide-react";
 import {
@@ -11,7 +11,8 @@ import {
   ResponsiveContainer, PieChart as RePieChart, Pie, Cell,
   LineChart, Line, AreaChart, Area
 } from "recharts";
-import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import { format, subDays } from "date-fns";
+// @ts-ignore
 import { supabase } from "../services/supabase";
 import toast from "react-hot-toast";
 
@@ -275,7 +276,7 @@ export default function Analytics() {
                       outerRadius={100}
                       paddingAngle={5}
                       dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      label={({ name, percent = 0 }) => `${name} ${(percent * 100).toFixed(0)}%`}
                     >
                       <Cell fill={COLORS.filled} />
                       <Cell fill={COLORS.vacant} />

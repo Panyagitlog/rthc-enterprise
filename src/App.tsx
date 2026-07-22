@@ -4,7 +4,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import CoordinatorForm from "./pages/CoordinatorForm";
 import AreaDashboard from "./pages/AreaDashboard";
-import Unauthorized from "./pages/Unauthorized";
+import Unauthorized from "./pages/Unauthorized.tsx";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Companies from "./pages/Companies";

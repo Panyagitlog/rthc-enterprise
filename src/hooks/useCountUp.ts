@@ -6,8 +6,8 @@ import { useEffect, useRef, useState } from "react";
  */
 export function useCountUp(target: number, durationMs = 700) {
   const [value, setValue] = useState(target);
-  const fromRef = useRef(target);
-  const rafRef = useRef<number>();
+  const fromRef = useRef<number>(target);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     const from = fromRef.current;

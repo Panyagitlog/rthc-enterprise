@@ -2,7 +2,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+// @ts-ignore
 import { supabase } from "../services/supabase";
+// @ts-ignore
 import { useDashboardData } from "../hooks/useDashboardData";
 import { useTheme } from "../hooks/useTheme";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
@@ -87,12 +89,6 @@ export default function Dashboard() {
 
   return (
     <>
-     {/* <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-800 p-6 sm:p-8 mb-6">
-      <ThreeBackground />
-      <div className="relative z-10">
-       <HeroWelcome … />
-      </div>
-     </div> */}
       <DashboardLayout
         darkMode={darkMode}
         onToggleDark={toggleDark}
@@ -104,49 +100,56 @@ export default function Dashboard() {
         onRefresh={fetchData}
         lastSyncedAt={lastSyncedAt}
       >
-        {/* Hero section with 3D background */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-800 p-6 sm:p-8 mb-6">
+        {/* Hero — command-center welcome band with ambient 3D depth */}
+        <section
+          className="animate-in fade-in relative mb-8 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-800 p-6 shadow-[0_20px_60px_-15px_rgba(30,27,75,0.45)] sm:p-8"
+          aria-label="Welcome"
+        >
+          {/* Inner highlight ring for glass depth */}
+          <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/10" />
           <ThreeBackground />
           <div className="relative z-10">
             <HeroWelcome userProfile={userProfile} onQuickAction={handleQuickAction} />
           </div>
-        </div>
+        </section>
 
-        <KpiGrid kpis={kpis} />
+        <div className="animate-in fade-in space-y-8" style={{ animationDelay: "40ms" }}>
+          <KpiGrid kpis={kpis} />
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-          <div className="space-y-6 lg:col-span-3">
-            <HeadcountTable
-              data={filteredTableData}
-              loading={loading}
-              companies={companies}
-              filters={filters}
-              onFilterChange={handleFilterChange}
-              onResetFilters={resetFilters}
-              onRowAction={handleRowAction}
-              onExport={handleExport}
-            />
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+            <div className="space-y-6 lg:col-span-3">
+              <HeadcountTable
+                data={filteredTableData}
+                loading={loading}
+                companies={companies}
+                filters={filters}
+                onFilterChange={handleFilterChange}
+                onResetFilters={resetFilters}
+                onRowAction={handleRowAction}
+                onExport={handleExport}
+              />
+            </div>
+            <div className="space-y-6 lg:col-span-1">
+              <LiveActivityFeed updates={recentUpdates} />
+              <QuickActionsPanel
+                onCompany={() => openManagement("companies")}
+                onLocation={() => openManagement("locations")}
+                onCoordinator={() => openManagement("coordinators")}
+                onNewEntry={() => navigate("/coordinator")}
+                onExport={handleExport}
+                onRefresh={fetchData}
+              />
+            </div>
           </div>
-          <div className="space-y-6 lg:col-span-1">
-            <LiveActivityFeed updates={recentUpdates} />
-            <QuickActionsPanel
-              onCompany={() => openManagement("companies")}
-              onLocation={() => openManagement("locations")}
-              onCoordinator={() => openManagement("coordinators")}
-              onNewEntry={() => navigate("/coordinator")}
-              onExport={handleExport}
-              onRefresh={fetchData}
-            />
-          </div>
-        </div>
 
-        <ChartsPanel
-          companyWiseData={companyWiseData}
-          vacancyDistribution={vacancyDistribution}
-          hourlyData={hourlyData}
-          dailyTrend={dailyTrend}
-          darkMode={darkMode}
-        />
+          <ChartsPanel
+            companyWiseData={companyWiseData}
+            vacancyDistribution={vacancyDistribution}
+            hourlyData={hourlyData}
+            dailyTrend={dailyTrend}
+            darkMode={darkMode}
+          />
+        </div>
       </DashboardLayout>
 
       <ManagementModal

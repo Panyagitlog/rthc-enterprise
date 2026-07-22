@@ -3,10 +3,11 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  ArrowLeft, Search, MapPin, Plus, Edit, Trash2,
-  ChevronUp, ChevronDown, Filter, X, Loader2
+  ArrowLeft, Search, Plus, Edit, Trash2,
+  ChevronUp, ChevronDown, Filter, X
 } from "lucide-react";
 import toast from "react-hot-toast";
+// @ts-ignore
 import { supabase } from "../services/supabase";
 import ManagementModal from "../components/ManagementModal";
 

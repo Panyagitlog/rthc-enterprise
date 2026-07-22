@@ -53,21 +53,19 @@ function KpiCard({
   const animated = useCountUp(value);
 
   return (
-    <div className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
-      <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${CHIP_TONE[tone]}`}>
+    <div className="group relative overflow-hidden rounded-[22px] border border-slate-200/60 bg-gradient-to-br from-white to-slate-50/50 p-4 shadow-[0_18px_60px_-28px_rgba(15,23,42,0.28)] backdrop-blur transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_28px_80px_-28px_rgba(15,23,42,0.35)] dark:border-slate-800/60 dark:bg-gradient-to-br dark:from-slate-900/80 dark:to-slate-800/60 dark:shadow-[0_18px_60px_-28px_rgba(2,6,23,0.48)] dark:hover:shadow-[0_28px_80px_-28px_rgba(2,6,23,0.55)] card-3d">
+      <div className="absolute inset-0 bg-gradient-to-br from-white/50 via-transparent to-transparent dark:from-white/10 dark:via-transparent dark:to-transparent" />
+      <div className="absolute -top-8 -right-8 h-20 w-20 rounded-full bg-gradient-to-r from-blue-400/10 to-violet-400/10 blur-2xl group-hover:blur-3xl transition-all" />
+      
+      <div className={`relative flex h-10 w-10 items-center justify-center rounded-2xl transition-all group-hover:scale-110 ${CHIP_TONE[tone]}`}>
         <Icon className="h-5 w-5" />
       </div>
-      <p className="mt-3 text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="font-display text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
-        {animated.toLocaleString()}
-      </p>
-      {subtext && <p className="text-xs text-slate-400 dark:text-slate-500">{subtext}</p>}
+      <p className="relative mt-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="relative mt-1 text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">{animated.toLocaleString()}</p>
+      {subtext && <p className="relative mt-1 text-xs text-slate-400 dark:text-slate-500">{subtext}</p>}
       {typeof progress === "number" && (
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-          <div
-            className={`h-full rounded-full ${BAR_TONE[tone]} transition-all duration-700`}
-            style={{ width: `${Math.min(Math.max(progress, 0), 100)}%` }}
-          />
+        <div className="relative mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-100/80 dark:bg-slate-800/80">
+          <div className={`h-full rounded-full ${BAR_TONE[tone]} transition-all duration-700 shadow-[0_0_12px_currentColor]/50`} style={{ width: `${Math.min(Math.max(progress, 0), 100)}%` }} />
         </div>
       )}
     </div>

@@ -1,23 +1,28 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useTheme as useThemeContext } from "../lib/theme/ThemeProvider";
 
-const STORAGE_KEY = "rthc-theme";
+export function useThemeWithSystem() {
+  const theme = useThemeContext();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return {
+    ...theme,
+    mounted,
+    className: (darkClass: string, lightClass: string = "") => (theme.isDark ? darkClass : lightClass),
+    style: (darkStyles: React.CSSProperties, lightStyles: React.CSSProperties = {}) =>
+      theme.isDark ? darkStyles : lightStyles,
+  };
+}
 
 export function useTheme() {
-  const [darkMode, setDarkMode] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored) return stored === "dark";
-    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
-  });
+  return useThemeContext();
+}
 
-  // Apply the 'dark' class to <html> so every Tailwind `dark:` utility
-  // across the app responds to this single source of truth.
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", darkMode);
-    window.localStorage.setItem(STORAGE_KEY, darkMode ? "dark" : "light");
-  }, [darkMode]);
-
-  const toggle = useCallback(() => setDarkMode((d) => !d), []);
-
-  return { darkMode, setDarkMode, toggle };
+export function useDarkMode() {
+  const { isDark, toggleTheme } = useThemeContext();
+  return { isDark, toggleTheme };
 }

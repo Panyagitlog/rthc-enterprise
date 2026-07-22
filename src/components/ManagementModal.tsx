@@ -5,6 +5,7 @@ import {
   Building2, MapPin, Users, Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+// @ts-ignore
 import { supabase } from "../services/supabase";
 import toast from "react-hot-toast";
 
@@ -54,7 +55,6 @@ interface ManagementModalProps {
   onClose: () => void;
   initialTab?: Tab;
   onDataChange?: () => void;
-  darkMode?: boolean;
   coordinator?: Coordinator | null;   // external editing
 }
 
@@ -64,9 +64,14 @@ const overlayVariants = {
   visible: { opacity: 1 },
 };
 
-const modalVariants = {
+const modalVariants: any = {
   hidden: { opacity: 0, scale: 0.95, y: 20 },
-  visible: { opacity: 1, scale: 1, y: 0, transition: { type: "spring", damping: 25, stiffness: 300 } },
+  visible: { 
+    opacity: 1, 
+    scale: 1, 
+    y: 0, 
+    transition: { type: "spring", damping: 25, stiffness: 300 } 
+  },
   exit: { opacity: 0, scale: 0.95, y: 20, transition: { duration: 0.2 } },
 };
 
@@ -93,7 +98,6 @@ export default function ManagementModal({
   onClose,
   initialTab = "companies",
   onDataChange,
-  darkMode = false,
   coordinator,
 }: ManagementModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);

@@ -7,6 +7,7 @@ import {
   Save, X, Edit3, Loader2
 } from "lucide-react";
 import toast from "react-hot-toast";
+// @ts-ignore
 import { supabase } from "../services/supabase";
 
 interface UserProfile {

@@ -3,6 +3,7 @@ import { useState, useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
+// @ts-ignore
 import { supabase } from "../../services/supabase";
 import type { HeadcountRecord } from "../../types/dashboard";
 
@@ -55,7 +56,7 @@ export default function DashboardLayout({
   }, [autoRefreshInterval, onRefresh]);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.06),transparent_25%),radial-gradient(circle_at_bottom_right,rgba(129,140,248,0.08),transparent_28%)] bg-slate-50/90 transition-colors dark:bg-slate-950/90">
       <Sidebar
         mobileOpen={mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}

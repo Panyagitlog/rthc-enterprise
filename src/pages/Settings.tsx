@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   ArrowLeft, Sun, Moon, Monitor, Check, Palette, Thermometer,
-  Bell, Volume2, Globe, Shield, Eye, Layout, Type, Contrast
+  Bell, Eye, Contrast
 } from "lucide-react";
 
 // ---------- Theme Types ----------
@@ -76,7 +76,6 @@ const applyTheme = (themeMode: ThemeMode, colorScheme: ColorScheme, accentColor:
 export default function Settings() {
   const navigate = useNavigate();
   const [settings, setSettings] = useState<Settings>(loadSettings());
-  const [preview, setPreview] = useState(false);
 
   useEffect(() => {
     applyTheme(settings.themeMode, settings.colorScheme, settings.accentColor);

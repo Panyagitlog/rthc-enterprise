@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { subDays, startOfDay, endOfDay, format } from "date-fns";
 import toast from "react-hot-toast";
+// @ts-ignore
 import { supabase } from "../services/supabase";
 import type {
   Company,

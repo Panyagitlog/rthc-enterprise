@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  ArrowLeft, Search, Building2, Plus, Edit, Trash2,
-  ChevronUp, ChevronDown, Filter, X, Loader2
+  ArrowLeft, Search, Plus, Edit, Trash2,
+  ChevronUp, ChevronDown, Filter, X
 } from "lucide-react";
 import toast from "react-hot-toast";
+// @ts-ignore
 import { supabase } from "../services/supabase";
 import ManagementModal from "../components/ManagementModal";
 
@@ -52,7 +53,7 @@ export default function Companies() {
 
   // Management modal state
   const [modalOpen, setModalOpen] = useState(false);
-  const [editCompany, setEditCompany] = useState<Company | null>(null);
+  const [, setEditCompany] = useState<Company | null>(null);
 
   // Dark mode detection
   const [darkMode, setDarkMode] = useState(

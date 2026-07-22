@@ -11,9 +11,10 @@ import {
   ChevronDown, ChevronUp, Eye, Edit, Trash2, UserPlus,
   Building, Map, Settings, LogOut, Bell, Moon, Sun, Menu, X,
   LayoutDashboard, MapPinned, UserCog, FileBarChart, History,
-  AlertTriangle, TrendingUp, Zap, Activity
+  Zap, Activity
 } from "lucide-react";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
+// @ts-ignore
 import { supabase } from "../services/supabase";
 import toast from "react-hot-toast";
 import ManagementModal from "../components/ManagementModal";
@@ -116,7 +117,7 @@ export default function Dashboard() {
   const [headcounts, setHeadcounts] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
-  const [coordinators, setCoordinators] = useState<any[]>([]);
+  const [, setCoordinators] = useState<any[]>([]);
   const [recentUpdates, setRecentUpdates] = useState<any[]>([]);
   const [notificationCount, setNotificationCount] = useState(0);
   const [managementModalOpen, setManagementModalOpen] = useState(false);
@@ -218,7 +219,7 @@ export default function Dashboard() {
 
       const todayStart = startOfDay(new Date());
       setNotificationCount(
-        (headcountsData || []).filter((h) => new Date(h.created_at) >= todayStart).length
+        (headcountsData || []).filter((h: any) => new Date(h.created_at) >= todayStart).length
       );
 
       const { data: recent } = await supabase
@@ -327,7 +328,7 @@ export default function Dashboard() {
   ];
 
   // Quick action button
-  const QuickAction = ({ icon: Icon, label, onClick, color = "indigo" }) => (
+  const QuickAction = ({ icon: Icon, label, onClick, color = "indigo" }: any) => (
     <button
       onClick={onClick}
       className={`flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-${color}-50 text-${color}-700 hover:bg-${color}-100 dark:bg-${color}-900/30 dark:text-${color}-300 dark:hover:bg-${color}-800/50 transition-colors`}

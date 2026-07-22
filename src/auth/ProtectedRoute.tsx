@@ -1,8 +1,9 @@
 import { Navigate } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
 
-export default function ProtectedRoute({ children }) {
-  const auth = useAuth();
+export default function ProtectedRoute({ children }: { children: any }) {
+  const auth = useAuth() as any;
+
 
   if (!auth) {
     return <h2>Auth Context Missing</h2>;

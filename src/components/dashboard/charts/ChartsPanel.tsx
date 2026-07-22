@@ -47,7 +47,7 @@ export default function ChartsPanel({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="rounded-[24px] border border-slate-200/80 bg-white/80 p-5 shadow-[0_18px_60px_-28px_rgba(15,23,42,0.28)] backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/80">
         <h4 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-200">Company-wise Headcount</h4>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={companyWiseData} barGap={4}>
@@ -63,7 +63,7 @@ export default function ChartsPanel({
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-[24px] border border-slate-200/80 bg-white/80 p-5 shadow-[0_18px_60px_-28px_rgba(15,23,42,0.28)] backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/80">
           <h4 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-200">Filled vs Vacant</h4>
           <ResponsiveContainer width="100%" height={260}>
             <PieChart>
@@ -86,7 +86,7 @@ export default function ChartsPanel({
           </ResponsiveContainer>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-[24px] border border-slate-200/80 bg-white/80 p-5 shadow-[0_18px_60px_-28px_rgba(15,23,42,0.28)] backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/80">
           <h4 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-200">Hourly Submissions (Today)</h4>
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={hourlyData}>
@@ -107,7 +107,7 @@ export default function ChartsPanel({
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="rounded-[24px] border border-slate-200/80 bg-white/80 p-5 shadow-[0_18px_60px_-28px_rgba(15,23,42,0.28)] backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/80">
         <h4 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-200">Headcount Trend — Last 30 Days</h4>
         <ResponsiveContainer width="100%" height={280}>
           <AreaChart data={dailyTrend}>

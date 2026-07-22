@@ -1,8 +1,9 @@
 import { Navigate } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
 
-export default function RoleGuard({ allowedRoles, children }) {
-  const auth = useAuth();
+export default function RoleGuard({ allowedRoles, children }: { allowedRoles: any; children: any }) {
+  const auth = useAuth() as any;
+
 
   if (!auth) {
     return <h2>Auth Context Missing</h2>;

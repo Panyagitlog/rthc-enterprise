@@ -95,13 +95,13 @@ export default function HeadcountTable({
   ];
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className="border-b border-slate-100 p-4 dark:border-slate-800">
+    <div className="overflow-hidden rounded-[24px] border border-slate-200/80 bg-white/80 shadow-[0_18px_60px_-28px_rgba(15,23,42,0.28)] backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/80">
+      <div className="border-b border-slate-100/80 bg-slate-50/60 p-4 dark:border-slate-800/80 dark:bg-slate-950/50">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowFilters((s) => !s)}
-              className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              className="inline-flex items-center rounded-2xl border border-slate-200/80 bg-white/80 px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50 dark:border-slate-700/80 dark:bg-slate-800/70 dark:text-slate-200 dark:hover:bg-slate-700"
             >
               <Filter className="mr-1 h-4 w-4" />
               Filters
@@ -116,11 +116,11 @@ export default function HeadcountTable({
               value={filters.search}
               onChange={(e) => onFilterChange("search", e.target.value)}
               placeholder="Search records…"
-              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              className="rounded-2xl border border-slate-200/80 bg-white/80 px-3 py-1.5 text-sm shadow-sm dark:border-slate-700/80 dark:bg-slate-800/70 dark:text-slate-200"
             />
             <button
               onClick={onExport}
-              className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              className="inline-flex items-center rounded-2xl border border-slate-200/80 bg-white/80 px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50 dark:border-slate-700/80 dark:bg-slate-800/70 dark:text-slate-200 dark:hover:bg-slate-700"
             >
               <Download className="mr-1 h-4 w-4" /> Export
             </button>
@@ -134,7 +134,7 @@ export default function HeadcountTable({
               <select
                 value={filters.companyId}
                 onChange={(e) => onFilterChange("companyId", e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full rounded-2xl border border-slate-200/80 bg-white/80 px-2 py-1.5 text-sm shadow-sm dark:border-slate-700/80 dark:bg-slate-800/70 dark:text-slate-200"
               >
                 <option value="">All</option>
                 {companies.map((c) => (
@@ -149,7 +149,7 @@ export default function HeadcountTable({
               <select
                 value={filters.dateRange}
                 onChange={(e) => onFilterChange("dateRange", e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full rounded-2xl border border-slate-200/80 bg-white/80 px-2 py-1.5 text-sm shadow-sm dark:border-slate-700/80 dark:bg-slate-800/70 dark:text-slate-200"
               >
                 <option value="all">All Time</option>
                 <option value="today">Today</option>
@@ -162,7 +162,7 @@ export default function HeadcountTable({
               <select
                 value={filters.status}
                 onChange={(e) => onFilterChange("status", e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full rounded-2xl border border-slate-200/80 bg-white/80 px-2 py-1.5 text-sm shadow-sm dark:border-slate-700/80 dark:bg-slate-800/70 dark:text-slate-200"
               >
                 <option value="">All</option>
                 <option value="understaffed">Understaffed</option>
@@ -175,8 +175,8 @@ export default function HeadcountTable({
       </div>
 
       <div className="max-h-[600px] overflow-auto">
-        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-          <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800">
+        <table className="min-w-full divide-y divide-slate-200/80 dark:divide-slate-800/80">
+          <thead className="sticky top-0 z-10 bg-slate-50/90 dark:bg-slate-900/90">
             <tr>
               {columns.map((col) => (
                 <th
@@ -249,25 +249,25 @@ export default function HeadcountTable({
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => onRowAction?.("view", h)}
-                          className="rounded p-1 text-slate-400 hover:bg-teal-50 hover:text-teal-600 dark:hover:bg-teal-500/10"
+                          className="rounded-lg p-1.5 text-slate-400 transition hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-500/10"
                         >
                           <Eye className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => onRowAction?.("edit", h)}
-                          className="rounded p-1 text-slate-400 hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-500/10"
+                          className="rounded-lg p-1.5 text-slate-400 transition hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-500/10"
                         >
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => onRowAction?.("delete", h)}
-                          className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10"
+                          className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => onRowAction?.("history", h)}
-                          className="rounded p-1 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10"
+                          className="rounded-lg p-1.5 text-slate-400 transition hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-violet-500/10"
                         >
                           <History className="h-4 w-4" />
                         </button>
@@ -281,7 +281,7 @@ export default function HeadcountTable({
         </table>
       </div>
 
-      <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+      <div className="flex items-center justify-between border-t border-slate-100/80 bg-slate-50/60 px-4 py-3 text-sm text-slate-500 dark:border-slate-800/80 dark:bg-slate-950/50 dark:text-slate-400">
         <span>
           {sorted.length} record{sorted.length !== 1 ? "s" : ""}
         </span>

@@ -3,11 +3,12 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  ArrowLeft, Search, Users, UserCheck, UserX, RefreshCw,
-  Building2, MapPin, Loader2, Filter, X, Clock, AlertTriangle
+  ArrowLeft, Search, Users, UserCheck, RefreshCw,
+  Clock, AlertTriangle, X
 } from "lucide-react";
 import { format, startOfDay, endOfDay } from "date-fns";
 import toast from "react-hot-toast";
+// @ts-ignore
 import { supabase } from "../services/supabase";
 
 // ---------- Types ----------
@@ -72,13 +73,13 @@ export default function HeadcountPage() {
       const submittedIds = (todayData || []).map((s: Submission) => s.coordinator_id);
 
       // For coordinators who did NOT submit today, get their last submission date
-      const notSubmittedCoordinators = (coordinatorsData || []).filter((c) => !submittedIds.includes(c.id));
+      const notSubmittedCoordinators = (coordinatorsData || []).filter((c: any) => !submittedIds.includes(c.id));
       let lastSubs: Record<string, string> = {};
       if (notSubmittedCoordinators.length > 0) {
         const { data: lastData } = await supabase
           .from("headcount_updates")
           .select("coordinator_id, created_at")
-          .in("coordinator_id", notSubmittedCoordinators.map((c) => c.id))
+          .in("coordinator_id", notSubmittedCoordinators.map((c: any) => c.id))
           .order("created_at", { ascending: false });
 
         // Build map: coordinator_id -> latest created_at
