@@ -1,32 +1,63 @@
-# React + TypeScript + Vite
+# RTHC / RTCA Enterprise Platform
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+DMCFS enterprise workforce management suite — a single React application hosting two
+linked apps behind an application selector:
 
-Currently, two official plugins are available:
+- **RTHC** (Real-Time Head Count) — company, location, and coordinator-driven headcount
+  tracking with a live dashboard, KPI cards, and history.
+- **RTCA** (Real-Time Client Analytics) — workforce analytics dashboard with requirement /
+  filled / vacant reporting, shift and scheme breakdowns, company & location drill-downs,
+  trend charts, and CSV/Excel export.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Tech stack
 
-## React Compiler
+- **Frontend:** React 19 + TypeScript, Vite, Tailwind CSS, Recharts, Framer Motion,
+  React Router, React Hook Form
+- **Data:** Supabase (Postgres + Auth + Realtime) for the live application data
+- **Backend (in-progress):** Express + Prisma API under [`server/`](server) for a subset
+  of endpoints (auth, headcount, dashboard, companies, locations, users)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Project structure
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```
+src/            React app (pages, components, hooks, services, routes)
+server/         Express + Prisma backend (auth, headcount, company/location APIs)
+public/         Static assets, including DMCFS brand logos
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Getting started
+
+```bash
+npm install
+cp .env.example .env          # fill in Supabase URL/anon key
+npm run dev                   # start the Vite dev server
+```
+
+Optional Express/Prisma backend:
+
+```bash
+cd server
+npm install
+cp .env.example .env          # fill in DATABASE_URL and JWT_SECRET
+npm run dev
+```
+
+## Available scripts
+
+| Command           | Description                        |
+| ------------------| ----------------------------------- |
+| `npm run dev`     | Start the Vite development server   |
+| `npm run build`   | Type-check and build for production |
+| `npm run lint`    | Run Oxlint                          |
+| `npm run preview` | Preview the production build        |
+
+## Branding
+
+Official DMCFS logo assets live in [`public/`](public) (`dmcfs.png`, `dmcfs-mark.png`)
+and are served through the [`DMCFSLogo`](src/components/brand/DMCFSLogo.tsx) component,
+which supports `full`/`mark` variants and responsive size presets.
+
+## Environment variables
+
+Never commit real `.env` files. See `.gitignore` for the ignored patterns and use
+`.env.example` files to document required variables without secrets.
