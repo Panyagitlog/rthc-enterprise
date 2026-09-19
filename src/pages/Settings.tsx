@@ -5,6 +5,7 @@ import {
   ArrowLeft, Sun, Moon, Monitor, Check, Palette, Thermometer,
   Bell, Eye, Contrast
 } from "lucide-react";
+import { useTheme } from "../lib/theme/ThemeProvider";
 
 // ---------- Theme Types ----------
 type ThemeMode = "system" | "light" | "dark";
@@ -40,47 +41,16 @@ const saveSettings = (settings: Settings) => {
   localStorage.setItem("rthc_settings", JSON.stringify(settings));
 };
 
-// Apply settings to document
-const applyTheme = (themeMode: ThemeMode, colorScheme: ColorScheme, accentColor: AccentColor) => {
-  const root = document.documentElement;
-
-  // Remove all theme classes
-  root.classList.remove("theme-warm", "theme-cool", "theme-professional", "theme-default");
-  root.classList.add(`theme-${colorScheme}`);
-
-  // Remove previous accent classes
-  const accentClasses = ["accent-indigo", "accent-blue", "accent-emerald", "accent-rose", "accent-amber", "accent-violet"];
-  root.classList.remove(...accentClasses);
-  root.classList.add(`accent-${accentColor}`);
-
-  // Dark mode handling
-  const applyDark = (dark: boolean) => {
-    if (dark) {
-      root.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      root.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  };
-
-  if (themeMode === "system") {
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    applyDark(prefersDark);
-  } else {
-    applyDark(themeMode === "dark");
-  }
-};
-
 // ---------- Component ----------
 export default function Settings() {
   const navigate = useNavigate();
+  const { mode, setMode } = useTheme();
   const [settings, setSettings] = useState<Settings>(loadSettings());
 
   useEffect(() => {
-    applyTheme(settings.themeMode, settings.colorScheme, settings.accentColor);
+    setMode(settings.themeMode);
     saveSettings(settings);
-  }, [settings]);
+  }, [settings, setMode]);
 
   const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }));

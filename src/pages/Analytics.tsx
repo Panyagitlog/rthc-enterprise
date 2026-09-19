@@ -17,24 +17,39 @@ import { supabase } from "../services/supabase";
 import toast from "react-hot-toast";
 
 // ---------- Types ----------
-type HeadcountRecord = {
+interface HeadcountRecord {
   id: string;
   requirement: number;
   filled: number;
   vacant: number;
   created_at: string;
-  company: { company_name: string } | null;
-  location: { location_name: string } | null;
-  coordinator: { name: string } | null;
-};
+  company_id?: string;
+  location_id?: string;
+  coordinator_id?: string;
+}
 
-type CompanyData = {
+interface Company {
+  id: string;
+  company_name: string;
+}
+
+interface Location {
+  id: string;
+  location_name: string;
+}
+
+interface Coordinator {
+  id: string;
+  name: string;
+}
+
+interface CompanyData {
   company: string;
   requirement: number;
   filled: number;
   vacant: number;
   utilization: number;
-};
+}
 
 // ---------- Colors ----------
 const COLORS = {
@@ -48,36 +63,99 @@ export default function Analytics() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [allRecords, setAllRecords] = useState<HeadcountRecord[]>([]);
+  const [companiesMap, setCompaniesMap] = useState<Record<string, string>>({});
+  const [locationsMap, setLocationsMap] = useState<Record<string, string>>({});
+  const [coordinatorsMap, setCoordinatorsMap] = useState<Record<string, string>>({});
   const [companiesCount, setCompaniesCount] = useState(0);
   const [locationsCount, setLocationsCount] = useState(0);
   const [coordinatorsCount, setCoordinatorsCount] = useState(0);
 
   // Dark mode detection
-  const darkMode = document.documentElement.classList.contains("dark");
+  const [darkMode, setDarkMode] = useState(() => 
+    document.documentElement.classList.contains("dark")
+  );
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setDarkMode(document.documentElement.classList.contains("dark"));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
 
   // ---------- Fetch Data ----------
   useEffect(() => {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        // Fetch counts
-        const [companiesRes, locationsRes, coordinatorsRes, headcountRes] = await Promise.all([
-          supabase.from("companies").select("id", { count: "exact", head: true }),
-          supabase.from("locations").select("id", { count: "exact", head: true }),
-          supabase.from("users").select("id", { count: "exact", head: true }).eq("role", "COORDINATOR"),
-          supabase
-            .from("headcount_updates")
-            .select("id, requirement, filled, vacant, created_at, company:companies ( company_name ), location:locations ( location_name ), coordinator:users ( name )")
-            .order("created_at", { ascending: false })
-            .limit(5000), // safe limit
+        console.log("🔄 Fetching analytics data...");
+
+        // 1. Fetch counts
+        const [companiesRes, locationsRes, coordinatorsRes] = await Promise.all([
+          supabase.from("companies").select("id", { count: "exact", head: true }).eq("status", "ACTIVE"),
+          supabase.from("locations").select("id", { count: "exact", head: true }).eq("status", "ACTIVE"),
+          supabase.from("users").select("id", { count: "exact", head: true }).eq("role", "COORDINATOR").eq("status", "ACTIVE"),
         ]);
 
         setCompaniesCount(companiesRes.count ?? 0);
         setLocationsCount(locationsRes.count ?? 0);
         setCoordinatorsCount(coordinatorsRes.count ?? 0);
-        setAllRecords(headcountRes.data || []);
+
+        // 2. Fetch all companies, locations, coordinators for lookup
+        const { data: companiesData } = await supabase
+          .from("companies")
+          .select("id, company_name")
+          .eq("status", "ACTIVE");
+
+        const { data: locationsData } = await supabase
+          .from("locations")
+          .select("id, location_name")
+          .eq("status", "ACTIVE");
+
+        const { data: coordinatorsData } = await supabase
+          .from("users")
+          .select("id, name")
+          .eq("role", "COORDINATOR")
+          .eq("status", "ACTIVE");
+
+        // Build lookup maps
+        const compMap: Record<string, string> = {};
+        (companiesData || []).forEach((c: Company) => {
+          compMap[c.id] = c.company_name;
+        });
+
+        const locMap: Record<string, string> = {};
+        (locationsData || []).forEach((l: Location) => {
+          locMap[l.id] = l.location_name;
+        });
+
+        const coordMap: Record<string, string> = {};
+        (coordinatorsData || []).forEach((c: Coordinator) => {
+          coordMap[c.id] = c.name;
+        });
+
+        setCompaniesMap(compMap);
+        setLocationsMap(locMap);
+        setCoordinatorsMap(coordMap);
+
+        // 3. Fetch headcount records (simplified)
+        const { data: headcountData, error: headcountError } = await supabase
+          .from("headcount_updates")
+          .select("id, requirement, filled, vacant, created_at, company_id, location_id, coordinator_id")
+          .order("created_at", { ascending: false })
+          .limit(5000);
+
+        if (headcountError) {
+          console.error("❌ Error fetching headcount:", headcountError);
+          throw headcountError;
+        }
+
+        console.log(`✅ Found ${headcountData?.length || 0} headcount records`);
+        setAllRecords(headcountData || []);
+
       } catch (err: any) {
-        toast.error("Failed to load analytics data");
+        console.error("❌ Failed to load analytics data:", err);
+        toast.error("Failed to load analytics data: " + err.message);
       } finally {
         setLoading(false);
       }
@@ -87,40 +165,42 @@ export default function Analytics() {
 
   // ---------- Computed KPIs ----------
   const overall = useMemo(() => {
-    const totalRequirement = allRecords.reduce((s, r) => s + r.requirement, 0);
-    const totalFilled = allRecords.reduce((s, r) => s + r.filled, 0);
-    const totalVacant = allRecords.reduce((s, r) => s + r.vacant, 0);
+    const totalRequirement = allRecords.reduce((s, r) => s + (r.requirement || 0), 0);
+    const totalFilled = allRecords.reduce((s, r) => s + (r.filled || 0), 0);
+    const totalVacant = allRecords.reduce((s, r) => s + (r.vacant || 0), 0);
     const utilization = totalRequirement ? Math.round((totalFilled / totalRequirement) * 100) : 0;
     return { totalRequirement, totalFilled, totalVacant, utilization };
   }, [allRecords]);
 
-  // ---------- Company‑wise data ----------
+  // ---------- Company-wise data ----------
   const companyWise = useMemo(() => {
     const map: Record<string, CompanyData> = {};
     allRecords.forEach((r) => {
-      const name = r.company?.company_name || "Unknown";
-      if (!map[name]) map[name] = { company: name, requirement: 0, filled: 0, vacant: 0, utilization: 0 };
-      map[name].requirement += r.requirement;
-      map[name].filled += r.filled;
-      map[name].vacant += r.vacant;
+      const name = r.company_id ? companiesMap[r.company_id] || "Unknown" : "Unknown";
+      if (!map[name]) {
+        map[name] = { company: name, requirement: 0, filled: 0, vacant: 0, utilization: 0 };
+      }
+      map[name].requirement += r.requirement || 0;
+      map[name].filled += r.filled || 0;
+      map[name].vacant += r.vacant || 0;
     });
     return Object.values(map).map((c) => ({
       ...c,
       utilization: c.requirement ? Math.round((c.filled / c.requirement) * 100) : 0,
     }));
-  }, [allRecords]);
+  }, [allRecords, companiesMap]);
 
   // ---------- Vacancy distribution ----------
   const vacancyDist = useMemo(() => {
-    const filled = allRecords.reduce((s, r) => s + r.filled, 0);
-    const vacant = allRecords.reduce((s, r) => s + r.vacant, 0);
+    const filled = allRecords.reduce((s, r) => s + (r.filled || 0), 0);
+    const vacant = allRecords.reduce((s, r) => s + (r.vacant || 0), 0);
     return [
       { name: "Filled", value: filled },
       { name: "Vacant", value: vacant },
     ];
   }, [allRecords]);
 
-  // ---------- Trend over last 30 days (filled headcount per day) ----------
+  // ---------- Trend over last 30 days ----------
   const trendData = useMemo(() => {
     const today = new Date();
     const days: { date: string; filled: number }[] = [];
@@ -130,14 +210,16 @@ export default function Analytics() {
       days.push({ date: key, filled: 0 });
     }
     allRecords.forEach((r) => {
-      const rDate = format(new Date(r.created_at), "MMM dd");
-      const day = days.find((d) => d.date === rDate);
-      if (day) day.filled += r.filled;
+      if (r.created_at) {
+        const rDate = format(new Date(r.created_at), "MMM dd");
+        const day = days.find((d) => d.date === rDate);
+        if (day) day.filled += r.filled || 0;
+      }
     });
     return days;
   }, [allRecords]);
 
-  // ---------- Daily submissions (count of updates) ----------
+  // ---------- Daily submissions ----------
   const dailySubmissions = useMemo(() => {
     const today = new Date();
     const days: { date: string; submissions: number }[] = [];
@@ -147,9 +229,11 @@ export default function Analytics() {
       days.push({ date: key, submissions: 0 });
     }
     allRecords.forEach((r) => {
-      const rDate = format(new Date(r.created_at), "MMM dd");
-      const day = days.find((d) => d.date === rDate);
-      if (day) day.submissions += 1;
+      if (r.created_at) {
+        const rDate = format(new Date(r.created_at), "MMM dd");
+        const day = days.find((d) => d.date === rDate);
+        if (day) day.submissions += 1;
+      }
     });
     return days;
   }, [allRecords]);
@@ -231,7 +315,7 @@ export default function Analytics() {
 
           {/* Charts Grid */}
           <div className="space-y-8 print:space-y-6">
-            {/* Company‑wise Headcount (Bar) */}
+            {/* Company-wise Headcount (Bar) */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -239,14 +323,27 @@ export default function Analytics() {
             >
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-indigo-500" />
-                Company‑wise Headcount
+                Company-wise Headcount
               </h3>
               <ResponsiveContainer width="100%" height={350}>
                 <BarChart data={companyWise}>
                   <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? "#334155" : "#e2e8f0"} />
-                  <XAxis dataKey="company" stroke={darkMode ? "#94a3b8" : "#64748b"} tick={{ fontSize: 12 }} angle={-20} textAnchor="end" height={60} />
+                  <XAxis 
+                    dataKey="company" 
+                    stroke={darkMode ? "#94a3b8" : "#64748b"} 
+                    tick={{ fontSize: 12 }} 
+                    angle={-20} 
+                    textAnchor="end" 
+                    height={60} 
+                  />
                   <YAxis stroke={darkMode ? "#94a3b8" : "#64748b"} />
-                  <Tooltip contentStyle={{ backgroundColor: darkMode ? "#1e293b" : "#fff", borderColor: darkMode ? "#334155" : "#e2e8f0", color: darkMode ? "#f1f5f9" : "#0f172a" }} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: darkMode ? "#1e293b" : "#fff", 
+                      borderColor: darkMode ? "#334155" : "#e2e8f0", 
+                      color: darkMode ? "#f1f5f9" : "#0f172a" 
+                    }} 
+                  />
                   <Legend />
                   <Bar dataKey="requirement" fill={COLORS.requirement} name="Requirement" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="filled" fill={COLORS.filled} name="Filled" radius={[4, 4, 0, 0]} />
@@ -281,7 +378,13 @@ export default function Analytics() {
                       <Cell fill={COLORS.filled} />
                       <Cell fill={COLORS.vacant} />
                     </Pie>
-                    <Tooltip />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: darkMode ? "#1e293b" : "#fff", 
+                        borderColor: darkMode ? "#334155" : "#e2e8f0", 
+                        color: darkMode ? "#f1f5f9" : "#0f172a" 
+                      }} 
+                    />
                   </RePieChart>
                 </ResponsiveContainer>
               </motion.div>
@@ -340,7 +443,13 @@ export default function Analytics() {
                   <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? "#334155" : "#e2e8f0"} />
                   <XAxis dataKey="date" stroke={darkMode ? "#94a3b8" : "#64748b"} />
                   <YAxis stroke={darkMode ? "#94a3b8" : "#64748b"} />
-                  <Tooltip contentStyle={{ backgroundColor: darkMode ? "#1e293b" : "#fff", borderColor: darkMode ? "#334155" : "#e2e8f0", color: darkMode ? "#f1f5f9" : "#0f172a" }} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: darkMode ? "#1e293b" : "#fff", 
+                      borderColor: darkMode ? "#334155" : "#e2e8f0", 
+                      color: darkMode ? "#f1f5f9" : "#0f172a" 
+                    }} 
+                  />
                   <Area type="monotone" dataKey="filled" stroke="#34d399" fill="url(#filledGradient)" strokeWidth={2} name="Filled" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -361,7 +470,13 @@ export default function Analytics() {
                   <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? "#334155" : "#e2e8f0"} />
                   <XAxis dataKey="date" stroke={darkMode ? "#94a3b8" : "#64748b"} />
                   <YAxis stroke={darkMode ? "#94a3b8" : "#64748b"} allowDecimals={false} />
-                  <Tooltip contentStyle={{ backgroundColor: darkMode ? "#1e293b" : "#fff", borderColor: darkMode ? "#334155" : "#e2e8f0", color: darkMode ? "#f1f5f9" : "#0f172a" }} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: darkMode ? "#1e293b" : "#fff", 
+                      borderColor: darkMode ? "#334155" : "#e2e8f0", 
+                      color: darkMode ? "#f1f5f9" : "#0f172a" 
+                    }} 
+                  />
                   <Line type="monotone" dataKey="submissions" stroke="#818cf8" strokeWidth={2} dot={{ r: 2 }} name="Submissions" />
                 </LineChart>
               </ResponsiveContainer>
@@ -383,11 +498,21 @@ export default function Analytics() {
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 dark:bg-slate-900/50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Company</th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Requirement</th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Filled</th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Vacant</th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Utilisation</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                        Company
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                        Requirement
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                        Filled
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                        Vacant
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                        Utilisation
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
@@ -396,12 +521,20 @@ export default function Analytics() {
                       .map((c) => (
                         <tr key={c.company} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                           <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{c.company}</td>
-                          <td className="px-4 py-3 text-right text-slate-700 dark:text-slate-300">{c.requirement.toLocaleString()}</td>
-                          <td className="px-4 py-3 text-right text-emerald-600 dark:text-emerald-400">{c.filled.toLocaleString()}</td>
-                          <td className="px-4 py-3 text-right text-rose-600 dark:text-rose-400">{c.vacant.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-right text-slate-700 dark:text-slate-300">
+                            {c.requirement.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-right text-emerald-600 dark:text-emerald-400">
+                            {c.filled.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-right text-rose-600 dark:text-rose-400">
+                            {c.vacant.toLocaleString()}
+                          </td>
                           <td className="px-4 py-3 text-right">
                             <span className={`font-medium ${
-                              c.utilization >= 80 ? "text-emerald-600" : c.utilization >= 50 ? "text-amber-600" : "text-rose-600"
+                              c.utilization >= 80 ? "text-emerald-600 dark:text-emerald-400" : 
+                              c.utilization >= 50 ? "text-amber-600 dark:text-amber-400" : 
+                              "text-rose-600 dark:text-rose-400"
                             }`}>
                               {c.utilization}%
                             </span>

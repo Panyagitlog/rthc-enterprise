@@ -41,7 +41,7 @@ export default function DashboardLayout({
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    navigate("/login");
+    navigate("/");
   };
 
   // Auto‑refresh effect

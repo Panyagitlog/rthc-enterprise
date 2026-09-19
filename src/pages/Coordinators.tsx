@@ -16,13 +16,21 @@ interface Coordinator {
   id: string;
   name: string;
   email: string;
-  mobile?: string;            // no phone column, only mobile
+  mobile?: string;
   role: string;
   company_id?: string | null;
   location_id?: string | null;
   status?: string;
-  company?: { company_name: string } | null;
-  location?: { location_name: string } | null;
+}
+
+interface Company {
+  id: string;
+  company_name: string;
+}
+
+interface Location {
+  id: string;
+  location_name: string;
 }
 
 // ---------- Status Badge ----------
@@ -45,6 +53,8 @@ export default function Coordinators() {
 
   const [loading, setLoading] = useState(true);
   const [coordinators, setCoordinators] = useState<Coordinator[]>([]);
+  const [companies, setCompanies] = useState<Record<string, string>>({});
+  const [locations, setLocations] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
   const [sortKey, setSortKey] = useState<keyof Coordinator | "company_name" | "location_name">("name");
@@ -64,22 +74,70 @@ export default function Coordinators() {
     return () => observer.disconnect();
   }, []);
 
-  // ---------- Fetch Coordinators (fixed: no phone column) ----------
+  // ---------- Fetch Coordinators (simplified) ----------
   const fetchCoordinators = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      console.log("🔄 Fetching coordinators...");
+      
+      // 1. Get coordinators (without joins)
+      const { data: coordinatorsData, error: coordError } = await supabase
         .from("users")
-        .select(`
-          id, name, email, mobile, role, company_id, location_id, status,
-          company:companies ( company_name ),
-          location:locations ( location_name )
-        `)
+        .select("id, name, email, mobile, role, company_id, location_id, status")
         .eq("role", "COORDINATOR")
         .order("name", { ascending: true });
-      if (error) throw error;
-      setCoordinators(data || []);
+
+      if (coordError) {
+        console.error("❌ Error fetching coordinators:", coordError);
+        throw coordError;
+      }
+
+      console.log(`✅ Found ${coordinatorsData?.length || 0} coordinators`);
+
+      // 2. Get all companies
+      const { data: companiesData, error: compError } = await supabase
+        .from("companies")
+        .select("id, company_name")
+        .eq("status", "ACTIVE");
+
+      if (compError) {
+        console.error("❌ Error fetching companies:", compError);
+      }
+
+      // 3. Get all locations
+      const { data: locationsData, error: locError } = await supabase
+        .from("locations")
+        .select("id, location_name")
+        .eq("status", "ACTIVE");
+
+      if (locError) {
+        console.error("❌ Error fetching locations:", locError);
+      }
+
+      // 4. Build lookup maps
+      const companyMap: Record<string, string> = {};
+      (companiesData || []).forEach((c: Company) => {
+        companyMap[c.id] = c.company_name;
+      });
+
+      const locationMap: Record<string, string> = {};
+      (locationsData || []).forEach((l: Location) => {
+        locationMap[l.id] = l.location_name;
+      });
+
+      setCoordinators(coordinatorsData || []);
+      setCompanies(companyMap);
+      setLocations(locationMap);
+
+      console.log("✅ Coordinators loaded successfully");
+      console.log("📊 Stats:", {
+        coordinators: coordinatorsData?.length || 0,
+        companies: Object.keys(companyMap).length,
+        locations: Object.keys(locationMap).length
+      });
+
     } catch (err: any) {
+      console.error("❌ Failed to load coordinators:", err);
       toast.error("Failed to load coordinators: " + err.message);
     } finally {
       setLoading(false);
@@ -101,9 +159,9 @@ export default function Coordinators() {
         (c) =>
           c.name.toLowerCase().includes(s) ||
           c.email.toLowerCase().includes(s) ||
-          c.mobile?.toLowerCase().includes(s) ||
-          c.company?.company_name?.toLowerCase().includes(s) ||
-          c.location?.location_name?.toLowerCase().includes(s)
+          (c.mobile || "").toLowerCase().includes(s) ||
+          (companies[c.company_id || ""] || "").toLowerCase().includes(s) ||
+          (locations[c.location_id || ""] || "").toLowerCase().includes(s)
       );
     }
 
@@ -116,11 +174,11 @@ export default function Coordinators() {
     list.sort((a: any, b: any) => {
       let aVal: any, bVal: any;
       if (sortKey === "company_name") {
-        aVal = (a.company?.company_name || "").toLowerCase();
-        bVal = (b.company?.company_name || "").toLowerCase();
+        aVal = (companies[a.company_id || ""] || "").toLowerCase();
+        bVal = (companies[b.company_id || ""] || "").toLowerCase();
       } else if (sortKey === "location_name") {
-        aVal = (a.location?.location_name || "").toLowerCase();
-        bVal = (b.location?.location_name || "").toLowerCase();
+        aVal = (locations[a.location_id || ""] || "").toLowerCase();
+        bVal = (locations[b.location_id || ""] || "").toLowerCase();
       } else {
         aVal = a[sortKey] || "";
         bVal = b[sortKey] || "";
@@ -133,7 +191,7 @@ export default function Coordinators() {
     });
 
     return list;
-  }, [coordinators, search, statusFilter, sortKey, sortAsc]);
+  }, [coordinators, companies, locations, search, statusFilter, sortKey, sortAsc]);
 
   const totalPages = Math.ceil(filtered.length / perPage);
   const paginated = filtered.slice((page - 1) * perPage, page * perPage);
@@ -281,7 +339,9 @@ export default function Coordinators() {
                 ) : paginated.length === 0 ? (
                   <tr>
                     <td colSpan={columns.length + 1} className="px-4 py-8 text-center text-slate-400 dark:text-slate-500">
-                      No coordinators found.
+                      {coordinators.length === 0 
+                        ? "No coordinators found. Click 'Add Coordinator' to create one." 
+                        : "No coordinators match your filters."}
                     </td>
                   </tr>
                 ) : (
@@ -300,10 +360,10 @@ export default function Coordinators() {
                         {coordinator.mobile || "—"}
                       </td>
                       <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
-                        {coordinator.company?.company_name || "—"}
+                        {coordinator.company_id ? companies[coordinator.company_id] || "—" : "—"}
                       </td>
                       <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
-                        {coordinator.location?.location_name || "—"}
+                        {coordinator.location_id ? locations[coordinator.location_id] || "—" : "—"}
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={coordinator.status} />

@@ -1,804 +1,453 @@
-// pages/Login.tsx - Enterprise AI Campus Edition
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, EyeOff, LogIn, AlertCircle, Shield, Zap } from 'lucide-react';
-import { Canvas, useFrame, extend, useThree } from '@react-three/fiber';
-import { Environment, Float, Effects, Sparkles } from '@react-three/drei';
-import * as THREE from 'three';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass';
+import DMCFSLogo from '../components/brand/DMCFSLogo';
+import {
+  Eye,
+  EyeOff,
+  LogIn,
+  AlertCircle,
+  Shield,
+  Zap,
+  Mail,
+  Lock,
+  ChevronRight,
+  Fingerprint,
+  Globe,
+  Users,
+  Activity,
+  Cloud,
+  Building2,
+  CheckCircle,
+  Network,
+  Cpu,
+  Radio,
+  LockKeyhole,
+  Server,
+  UserCheck,
+  MapPin,
+  Boxes,
+  ArrowRight,
+  Loader2,
+  Hexagon,
+  CircleDot,
+  Workflow,
+  Database,
+  KeyRound,
+  BadgeCheck
+} from 'lucide-react';
 
 // ============================================
-// ENTERPRISE CAMPUS GENERATOR
+// ENTERPRISE NETWORK VISUALIZATION COMPONENT
 // ============================================
 
-// Building Generator - Creates modern office towers
-function createBuilding(x: number, z: number, width: number, depth: number, height: number, color: string = '#e8edf2') {
-  const group = new THREE.Group();
-  
-  // Main tower
-  const geometry = new THREE.BoxGeometry(width, height, depth);
-  const material = new THREE.MeshPhysicalMaterial({
-    color: color,
-    roughness: 0.2,
-    metalness: 0.7,
-    clearcoat: 0.3,
-    clearcoatRoughness: 0.4,
-    transparent: true,
-    opacity: 0.95,
-  });
-  const tower = new THREE.Mesh(geometry, material);
-  tower.position.y = height / 2;
-  tower.castShadow = true;
-  tower.receiveShadow = true;
-  group.add(tower);
-
-  // Glass panels (window grid)
-  const rows = Math.floor(height / 2.5);
-  const cols = Math.floor(Math.min(width, depth) / 1.5);
-  const glassMat = new THREE.MeshPhysicalMaterial({
-    color: '#4a9eff',
-    roughness: 0.1,
-    metalness: 0.9,
-    transparent: true,
-    opacity: 0.3,
-    emissive: '#4a9eff',
-    emissiveIntensity: 0.1,
-  });
-
-  for (let i = 0; i < rows; i++) {
-    for (let j = 0; j < cols; j++) {
-      const glass = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.8, 0.8),
-        glassMat
-      );
-      const yPos = 1.5 + i * 2.2;
-      const xPos = -width/2 + 0.8 + j * 1.4;
-      glass.position.set(xPos, yPos, depth/2 + 0.01);
-      group.add(glass);
-    }
-  }
-
-  // Blue accent lines
-  const accentMat = new THREE.MeshPhysicalMaterial({
-    color: '#2563eb',
-    emissive: '#2563eb',
-    emissiveIntensity: 0.3,
-    roughness: 0.1,
-    metalness: 0.9,
-  });
-
-  for (let i = 0; i < 3; i++) {
-    const line = new THREE.Mesh(
-      new THREE.BoxGeometry(width + 0.2, 0.05, 0.05),
-      accentMat
-    );
-    line.position.set(0, (i + 1) * (height / 4), depth/2 + 0.02);
-    group.add(line);
-  }
-
-  return group;
+interface Node {
+  id: number;
+  x: number;
+  y: number;
+  type: 'person' | 'location' | 'system' | 'operation';
+  size: number;
 }
 
-// Data Center - Server racks with glowing lights
-function createDataCenter(x: number, z: number) {
-  const group = new THREE.Group();
-  const rackMat = new THREE.MeshPhysicalMaterial({
-    color: '#1a1a2e',
-    roughness: 0.3,
-    metalness: 0.8,
-  });
-  const lightMat = new THREE.MeshPhysicalMaterial({
-    color: '#00ff88',
-    emissive: '#00ff88',
-    emissiveIntensity: 0.5,
-  });
-
-  for (let i = 0; i < 8; i++) {
-    const rack = new THREE.Mesh(
-      new THREE.BoxGeometry(0.6, 2.5, 0.8),
-      rackMat
-    );
-    rack.position.set(i * 1.2 - 4.2, 1.25, 0);
-    rack.castShadow = true;
-    group.add(rack);
-
-    // LED lights on each rack
-    for (let j = 0; j < 6; j++) {
-      const led = new THREE.Mesh(
-        new THREE.SphereGeometry(0.05, 6, 6),
-        lightMat
-      );
-      led.position.set(i * 1.2 - 4.2, 0.3 + j * 0.4, 0.45);
-      group.add(led);
-    }
-  }
-
-  group.position.set(x, 0, z);
-  return group;
+interface Connection {
+  from: number;
+  to: number;
+  strength: number;
 }
 
-// Communication Tower
-function createCommsTower(x: number, z: number) {
-  const group = new THREE.Group();
-  const towerMat = new THREE.MeshPhysicalMaterial({
-    color: '#c0c8d0',
-    roughness: 0.2,
-    metalness: 0.9,
-  });
+const NetworkVisualization = () => {
+  const [nodes, setNodes] = useState<Node[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [particles, setParticles] = useState<{ x: number; y: number; speed: number; size: number }[]>([]);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number>();
+  const mouseRef = useRef({ x: 0, y: 0 });
 
-  // Main mast
-  const mast = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.15, 0.3, 8, 8),
-    towerMat
-  );
-  mast.position.y = 4;
-  mast.castShadow = true;
-  group.add(mast);
-
-  // Cross beams
-  for (let i = 0; i < 4; i++) {
-    const beam = new THREE.Mesh(
-      new THREE.BoxGeometry(1.5, 0.05, 0.05),
-      towerMat
-    );
-    beam.position.y = 1.5 + i * 2;
-    group.add(beam);
-
-    const beam2 = new THREE.Mesh(
-      new THREE.BoxGeometry(0.05, 0.05, 1.5),
-      towerMat
-    );
-    beam2.position.y = 1.5 + i * 2;
-    group.add(beam2);
-  }
-
-  // Antenna dish
-  const dishMat = new THREE.MeshPhysicalMaterial({
-    color: '#e8edf2',
-    roughness: 0.1,
-    metalness: 0.95,
-  });
-  const dish = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.8, 0.8, 0.1, 16),
-    dishMat
-  );
-  dish.position.set(0, 7.5, 0);
-  dish.rotation.x = Math.PI / 2;
-  group.add(dish);
-
-  // Signal rings
-  const ringMat = new THREE.MeshPhysicalMaterial({
-    color: '#4a9eff',
-    emissive: '#4a9eff',
-    emissiveIntensity: 0.3,
-    transparent: true,
-    opacity: 0.6,
-  });
-
-  for (let i = 0; i < 3; i++) {
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.5 + i * 0.3, 0.02, 8, 16),
-      ringMat
-    );
-    ring.position.set(0, 7.5, 0);
-    ring.rotation.x = Math.PI / 2;
-    group.add(ring);
-  }
-
-  group.position.set(x, 0, z);
-  return group;
-}
-
-// Helipad with glowing landing pad
-function createHelipad(x: number, z: number) {
-  const group = new THREE.Group();
-  
-  const padMat = new THREE.MeshPhysicalMaterial({
-    color: '#1a1a2e',
-    roughness: 0.3,
-    metalness: 0.8,
-  });
-  const pad = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.5, 1.5, 0.2, 16),
-    padMat
-  );
-  pad.position.y = 0.1;
-  pad.receiveShadow = true;
-  group.add(pad);
-
-  // Glowing ring
-  const ringMat = new THREE.MeshPhysicalMaterial({
-    color: '#2563eb',
-    emissive: '#2563eb',
-    emissiveIntensity: 0.8,
-    transparent: true,
-    opacity: 0.5,
-  });
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(1.3, 0.05, 8, 16),
-    ringMat
-  );
-  ring.position.y = 0.2;
-  ring.rotation.x = Math.PI / 2;
-  group.add(ring);
-
-  // H
-  const hMat = new THREE.MeshPhysicalMaterial({
-    color: '#ffffff',
-    emissive: '#ffffff',
-    emissiveIntensity: 0.2,
-  });
-  const h1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.6), hMat);
-  h1.position.set(0, 0.25, 0);
-  group.add(h1);
-  const h2 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.6), hMat);
-  h2.position.set(0, 0.25, 0);
-  h2.rotation.y = Math.PI / 2;
-  group.add(h2);
-
-  group.position.set(x, 0, z);
-  return group;
-}
-
-// Bridge with glass panels
-function createBridge(x1: number, z1: number, x2: number, z2: number) {
-  const group = new THREE.Group();
-  const midX = (x1 + x2) / 2;
-  const midZ = (z1 + z2) / 2;
-  const dx = x2 - x1;
-  const dz = z2 - z1;
-  const length = Math.sqrt(dx * dx + dz * dz);
-  const angle = Math.atan2(dx, dz);
-
-  const floorMat = new THREE.MeshPhysicalMaterial({
-    color: '#e8edf2',
-    roughness: 0.2,
-    metalness: 0.7,
-    transparent: true,
-    opacity: 0.8,
-  });
-  const floor = new THREE.Mesh(
-    new THREE.BoxGeometry(0.8, 0.1, length),
-    floorMat
-  );
-  floor.position.set(midX, 0.5, midZ);
-  floor.rotation.y = angle;
-  floor.receiveShadow = true;
-  group.add(floor);
-
-  // Glass rails
-  const glassMat = new THREE.MeshPhysicalMaterial({
-    color: '#4a9eff',
-    roughness: 0.1,
-    metalness: 0.9,
-    transparent: true,
-    opacity: 0.2,
-  });
-
-  for (let side = -0.4; side <= 0.4; side += 0.8) {
-    const rail = new THREE.Mesh(
-      new THREE.BoxGeometry(0.05, 0.5, length),
-      glassMat
-    );
-    rail.position.set(midX + side * Math.cos(angle + Math.PI/2), 0.8, midZ + side * Math.sin(angle + Math.PI/2));
-    rail.rotation.y = angle;
-    group.add(rail);
-  }
-
-  return group;
-}
-
-// Solar roof panels
-function createSolarRoof(x: number, z: number, width: number, depth: number) {
-  const group = new THREE.Group();
-  const panelMat = new THREE.MeshPhysicalMaterial({
-    color: '#1a1a2e',
-    roughness: 0.1,
-    metalness: 0.9,
-    emissive: '#2563eb',
-    emissiveIntensity: 0.05,
-  });
-
-  for (let i = 0; i < width / 1.2; i++) {
-    for (let j = 0; j < depth / 1.2; j++) {
-      const panel = new THREE.Mesh(
-        new THREE.PlaneGeometry(1, 1),
-        panelMat
-      );
-      panel.position.set(x - width/2 + 0.6 + i * 1.2, 3.5, z - depth/2 + 0.6 + j * 1.2);
-      panel.rotation.x = -Math.PI / 2;
-      group.add(panel);
-    }
-  }
-
-  return group;
-}
-
-// AI Core - Floating holographic sphere with rings
-function createAICore(x: number, z: number) {
-  const group = new THREE.Group();
-  
-  // Core sphere
-  const coreMat = new THREE.MeshPhysicalMaterial({
-    color: '#4a9eff',
-    emissive: '#4a9eff',
-    emissiveIntensity: 0.5,
-    roughness: 0.1,
-    metalness: 0.9,
-    transparent: true,
-    opacity: 0.3,
-  });
-  const core = new THREE.Mesh(
-    new THREE.SphereGeometry(0.8, 32, 32),
-    coreMat
-  );
-  core.position.y = 2;
-  group.add(core);
-
-  // Orbiting rings
-  const ringMat = new THREE.MeshPhysicalMaterial({
-    color: '#00ff88',
-    emissive: '#00ff88',
-    emissiveIntensity: 0.3,
-    transparent: true,
-    opacity: 0.6,
-  });
-
-  for (let i = 0; i < 3; i++) {
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(1.2 + i * 0.3, 0.02, 8, 32),
-      ringMat
-    );
-    ring.position.y = 2;
-    ring.rotation.x = Math.PI / 2 + i * 0.3;
-    ring.rotation.z = i * 0.5;
-    group.add(ring);
-  }
-
-  // Data particles around core
-  const particleCount = 50;
-  const positions = new Float32Array(particleCount * 3);
-  for (let i = 0; i < particleCount; i++) {
-    const theta = Math.random() * Math.PI * 2;
-    const phi = Math.acos(2 * Math.random() - 1);
-    const r = 1.5 + Math.random() * 0.5;
-    positions[i*3] = r * Math.sin(phi) * Math.cos(theta);
-    positions[i*3+1] = 2 + r * Math.cos(phi);
-    positions[i*3+2] = r * Math.sin(phi) * Math.sin(theta);
-  }
-
-  const particleGeo = new THREE.BufferGeometry();
-  particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const particleMat = new THREE.PointsMaterial({
-    color: '#4a9eff',
-    size: 0.03,
-    transparent: true,
-    opacity: 0.8,
-    blending: THREE.AdditiveBlending,
-  });
-  const particles = new THREE.Points(particleGeo, particleMat);
-  particles.position.y = 0;
-  group.add(particles);
-
-  group.position.set(x, 0, z);
-  return group;
-}
-
-// Drone - Flying vehicle with rotors
-function createDrone(x: number, z: number, y: number) {
-  const group = new THREE.Group();
-  
-  const bodyMat = new THREE.MeshPhysicalMaterial({
-    color: '#e8edf2',
-    roughness: 0.2,
-    metalness: 0.8,
-  });
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(0.4, 0.1, 0.6),
-    bodyMat
-  );
-  body.castShadow = true;
-  group.add(body);
-
-  // Arms
-  for (let i = 0; i < 4; i++) {
-    const angle = (i / 4) * Math.PI * 2;
-    const arm = new THREE.Mesh(
-      new THREE.BoxGeometry(0.02, 0.02, 0.4),
-      bodyMat
-    );
-    arm.position.set(Math.cos(angle) * 0.3, 0, Math.sin(angle) * 0.3);
-    arm.rotation.z = Math.PI / 2;
-    arm.rotation.y = -angle;
-    group.add(arm);
-
-    // Rotor
-    const rotor = new THREE.Mesh(
-      new THREE.BoxGeometry(0.15, 0.01, 0.15),
-      new THREE.MeshPhysicalMaterial({
-        color: '#c0c8d0',
-        roughness: 0.3,
-        metalness: 0.7,
-        transparent: true,
-        opacity: 0.5,
-      })
-    );
-    rotor.position.set(Math.cos(angle) * 0.5, 0.05, Math.sin(angle) * 0.5);
-    group.add(rotor);
-  }
-
-  // LED
-  const ledMat = new THREE.MeshPhysicalMaterial({
-    color: '#00ff88',
-    emissive: '#00ff88',
-    emissiveIntensity: 0.8,
-  });
-  const led = new THREE.Mesh(
-    new THREE.SphereGeometry(0.03, 6, 6),
-    ledMat
-  );
-  led.position.set(0, 0.06, 0.3);
-  group.add(led);
-
-  group.position.set(x, y, z);
-  return group;
-}
-
-// Autonomous Delivery Bot
-function createDeliveryBot(x: number, z: number) {
-  const group = new THREE.Group();
-  
-  const bodyMat = new THREE.MeshPhysicalMaterial({
-    color: '#ffffff',
-    roughness: 0.1,
-    metalness: 0.9,
-  });
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(0.4, 0.3, 0.4),
-    bodyMat
-  );
-  body.position.y = 0.15;
-  body.castShadow = true;
-  group.add(body);
-
-  // Wheels
-  const wheelMat = new THREE.MeshPhysicalMaterial({
-    color: '#1a1a2e',
-    roughness: 0.8,
-    metalness: 0.2,
-  });
-  for (let i = -1; i <= 1; i+=2) {
-    for (let j = -1; j <= 1; j+=2) {
-      const wheel = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.06, 0.06, 0.04, 8),
-        wheelMat
-      );
-      wheel.position.set(i * 0.18, 0.06, j * 0.18);
-      wheel.rotation.x = Math.PI / 2;
-      group.add(wheel);
-    }
-  }
-
-  // Sensor
-  const sensorMat = new THREE.MeshPhysicalMaterial({
-    color: '#4a9eff',
-    emissive: '#4a9eff',
-    emissiveIntensity: 0.3,
-  });
-  const sensor = new THREE.Mesh(
-    new THREE.SphereGeometry(0.04, 8, 8),
-    sensorMat
-  );
-  sensor.position.set(0, 0.2, 0.22);
-  group.add(sensor);
-
-  group.position.set(x, 0, z);
-  return group;
-}
-
-// ============================================
-// MAIN 3D SCENE
-// ============================================
-
-function EnterpriseCampus({ mouseX, mouseY }: { mouseX: number; mouseY: number }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const time = useRef(0);
-  const drones = useRef<THREE.Group[]>([]);
-  const botRef = useRef<THREE.Group | null>(null);
-  const particlesRef = useRef<THREE.Points | null>(null);
-  const coreRef = useRef<THREE.Group | null>(null);
-  const hoverRef = useRef<THREE.Mesh | null>(null);
-
-  // Generate campus buildings
-  const campus = useMemo(() => {
-    const group = new THREE.Group();
-
-    // Main office towers
-    const towerPositions = [
-      [-5, -3, 1.2, 1.2, 5],
-      [5, -3, 1.2, 1.2, 4.5],
-      [-4, 5, 1.5, 1.5, 6],
-      [6, 4, 1, 1, 4],
-      [0, -5, 1.8, 1.8, 5.5],
-      [-6, 2, 1, 1, 3.5],
-      [7, -2, 1.2, 1.2, 4],
-    ];
-
-    towerPositions.forEach(([x, z, w, d, h]) => {
-      const tower = createBuilding(x, z, w, d, h);
-      group.add(tower);
-    });
-
-    // Data Centers
-    group.add(createDataCenter(-7, -4));
-    group.add(createDataCenter(7, -5));
-
-    // Communication Towers
-    group.add(createCommsTower(-4, -6));
-    group.add(createCommsTower(4, -6));
-
-    // Helipad
-    group.add(createHelipad(0, 6));
-
-    // Bridges
-    group.add(createBridge(-2, 2, 2, 2));
-    group.add(createBridge(-3, -2, -1, -1));
-
-    // Solar roofs on some buildings
-    group.add(createSolarRoof(-5, -3, 1.2, 1.2));
-    group.add(createSolarRoof(5, -3, 1.2, 1.2));
-
-    // AI Core
-    const core = createAICore(-6, 3);
-    coreRef.current = core;
-    group.add(core);
-
-    return group;
+  // Check for reduced motion preference
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReducedMotion(mediaQuery.matches);
+    const handleChange = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
-  // Drones
-  const droneObjects = useMemo(() => {
-    const drones = [];
-    const positions = [
-      [-3, 2, 3],
-      [4, 1.5, -2],
-      [-5, 2.5, -4],
-      [6, 1.8, 3],
-      [0, 2.2, 0],
-    ];
-    positions.forEach(([x, y, z]) => {
-      const drone = createDrone(x, z, y);
-      drones.push(drone);
-    });
-    return drones;
-  }, []);
-
-  // Delivery bots
-  const bot = useMemo(() => {
-    const bot = createDeliveryBot(3, 2);
-    botRef.current = bot;
-    return bot;
-  }, []);
-
-  // Particles - Digital dust and energy
-  const particleSystem = useMemo(() => {
-    const count = 1000;
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
-
-    for (let i = 0; i < count; i++) {
-      positions[i*3] = (Math.random() - 0.5) * 40;
-      positions[i*3+1] = (Math.random() - 0.5) * 15 + 3;
-      positions[i*3+2] = (Math.random() - 0.5) * 40;
+  // Initialize network data
+  useEffect(() => {
+    const generateNodes = (): Node[] => {
+      const nodeTypes: Node['type'][] = ['person', 'location', 'system', 'operation'];
+      const generatedNodes: Node[] = [];
+      const nodeCount = 18;
       
-      colors[i*3] = 0.2 + Math.random() * 0.3;
-      colors[i*3+1] = 0.5 + Math.random() * 0.4;
-      colors[i*3+2] = 0.8 + Math.random() * 0.2;
-      
-      velocities[i*3] = (Math.random() - 0.5) * 0.02;
-      velocities[i*3+1] = (Math.random() - 0.5) * 0.02;
-      velocities[i*3+2] = (Math.random() - 0.5) * 0.02;
-    }
+      // Central node (RTHC core)
+      generatedNodes.push({
+        id: 0,
+        x: 50,
+        y: 50,
+        type: 'operation',
+        size: 6
+      });
 
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geo.userData.velocities = velocities;
-
-    const mat = new THREE.PointsMaterial({
-      size: 0.05,
-      transparent: true,
-      opacity: 0.6,
-      vertexColors: true,
-      blending: THREE.AdditiveBlending,
-      sizeAttenuation: true,
-    });
-
-    const points = new THREE.Points(geo, mat);
-    particlesRef.current = points;
-    return points;
-  }, []);
-
-  // Hover effect plane
-  const hoverPlane = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(0.5, 0.5);
-    const mat = new THREE.MeshPhysicalMaterial({
-      color: '#4a9eff',
-      emissive: '#4a9eff',
-      emissiveIntensity: 0.2,
-      transparent: true,
-      opacity: 0.3,
-      roughness: 0.1,
-      metalness: 0.9,
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.y = 0.01;
-    hoverRef.current = mesh;
-    return mesh;
-  }, []);
-
-  useFrame(({ clock }) => {
-    const elapsed = clock.getElapsedTime();
-    time.current = elapsed;
-
-    // Animate campus
-    if (groupRef.current) {
-      groupRef.current.rotation.y = mouseX * 0.15;
-      groupRef.current.position.x = mouseX * 0.3;
-      groupRef.current.position.z = mouseY * 0.2;
-    }
-
-    // Animate drones
-    droneObjects.forEach((drone, index) => {
-      const speed = 0.3 + index * 0.05;
-      const radius = 3 + index * 0.5;
-      const phase = index * 1.2;
-      
-      drone.position.x += Math.sin(elapsed * speed + phase) * 0.008;
-      drone.position.z += Math.cos(elapsed * speed * 0.7 + phase) * 0.008;
-      drone.position.y += Math.sin(elapsed * speed * 0.5 + phase) * 0.005;
-      
-      drone.rotation.y += 0.02;
-      drone.rotation.x = Math.sin(elapsed * 0.5 + phase) * 0.05;
-    });
-
-    // Animate bot
-    if (botRef.current) {
-      botRef.current.position.x += Math.sin(elapsed * 0.2) * 0.005;
-      botRef.current.position.z += Math.cos(elapsed * 0.15) * 0.005;
-      botRef.current.rotation.y += 0.01;
-    }
-
-    // Animate AI Core
-    if (coreRef.current) {
-      coreRef.current.rotation.y += 0.01;
-      coreRef.current.position.y = 0.5 + Math.sin(elapsed * 0.3) * 0.2;
-    }
-
-    // Animate particles
-    if (particlesRef.current) {
-      const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
-      const velocities = particlesRef.current.geometry.userData.velocities;
-      
-      for (let i = 0; i < positions.length; i += 3) {
-        positions[i] += velocities[i] + Math.sin(elapsed + i) * 0.001;
-        positions[i+1] += velocities[i+1] + Math.cos(elapsed * 0.5 + i) * 0.001;
-        positions[i+2] += velocities[i+2] + Math.sin(elapsed * 0.7 + i) * 0.001;
-        
-        // Wrap around
-        if (positions[i] > 20) positions[i] = -20;
-        if (positions[i] < -20) positions[i] = 20;
-        if (positions[i+1] > 10) positions[i+1] = -5;
-        if (positions[i+1] < -5) positions[i+1] = 10;
-        if (positions[i+2] > 20) positions[i+2] = -20;
-        if (positions[i+2] < -20) positions[i+2] = 20;
-      }
-      particlesRef.current.geometry.attributes.position.needsUpdate = true;
-    }
-
-    // Animate hover plane
-    if (hoverRef.current) {
-      hoverRef.current.position.x = mouseX * 2;
-      hoverRef.current.position.z = mouseY * 2;
-      hoverRef.current.scale.setScalar(1 + Math.sin(elapsed * 0.5) * 0.2);
-    }
-
-    // Animate communication tower rings
-    groupRef.current?.children.forEach(child => {
-      if (child.type === 'Group') {
-        child.children.forEach(subchild => {
-          if (subchild.type === 'Mesh' && subchild.geometry.type === 'TorusGeometry') {
-            subchild.rotation.z += 0.01;
-          }
+      for (let i = 1; i < nodeCount; i++) {
+        const angle = (i / (nodeCount - 1)) * Math.PI * 2;
+        const radius = 20 + Math.random() * 28;
+        generatedNodes.push({
+          id: i,
+          x: 50 + Math.cos(angle) * radius,
+          y: 50 + Math.sin(angle) * radius * 0.8,
+          type: nodeTypes[Math.floor(Math.random() * nodeTypes.length)],
+          size: Math.random() * 2.5 + 1.5
         });
       }
-    });
-  });
+      return generatedNodes;
+    };
 
-  return (
-    <group ref={groupRef}>
-      {/* Ground plane with reflection */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
-        <planeGeometry args={[40, 40]} />
-        <meshPhysicalMaterial 
-          color="#f0f4f8"
-          roughness={0.1}
-          metalness={0.9}
-          transparent
-          opacity={0.7}
-          envMapIntensity={1}
-        />
-      </mesh>
-
-      {/* Campus */}
-      <primitive object={campus} />
-
-      {/* Drones */}
-      {droneObjects.map((drone, i) => (
-        <primitive key={i} object={drone} />
-      ))}
-
-      {/* Delivery Bot */}
-      <primitive object={bot} />
-
-      {/* Particles */}
-      <primitive object={particleSystem} />
-
-      {/* Hover effect */}
-      <primitive object={hoverPlane} />
-
-      {/* Lighting */}
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[10, 15, 10]} intensity={1.5} castShadow shadow-mapSize={[2048, 2048]} />
-      <directionalLight position={[-10, 5, -10]} intensity={0.5} color="#88bbff" />
-      <pointLight position={[0, 10, 0]} intensity={0.5} color="#2563eb" />
-      <pointLight position={[-5, 3, -5]} intensity={0.3} color="#00ff88" />
+    const generateConnections = (nodeList: Node[]): Connection[] => {
+      const connectionList: Connection[] = [];
       
-      {/* Volumetric fog */}
-      <fog attach="fog" args={['#e8ecf0', 15, 35]} />
-    </group>
-  );
-}
+      // Connect central node to all others
+      for (let i = 1; i < nodeList.length; i++) {
+        connectionList.push({
+          from: 0,
+          to: i,
+          strength: Math.random() * 0.5 + 0.3
+        });
+      }
 
-// ============================================
-// POST-PROCESSING
-// ============================================
+      // Add some interconnections
+      for (let i = 1; i < nodeList.length - 1; i++) {
+        if (Math.random() > 0.6) {
+          connectionList.push({
+            from: i,
+            to: i + 1,
+            strength: Math.random() * 0.4 + 0.2
+          });
+        }
+        if (Math.random() > 0.7 && i < nodeList.length - 3) {
+          connectionList.push({
+            from: i,
+            to: i + 2,
+            strength: Math.random() * 0.3 + 0.15
+          });
+        }
+      }
 
-function PostProcessing() {
-  const composer = useRef<EffectComposer | null>(null);
-  const { scene, camera, gl } = useThree();
+      return connectionList;
+    };
 
+    const generateParticles = () => {
+      return Array.from({ length: 30 }, () => ({
+        x: Math.random() * 100,
+        y: Math.random() * 100,
+        speed: Math.random() * 0.1 + 0.05,
+        size: Math.random() * 1.5 + 0.5
+      }));
+    };
+
+    const nodeList = generateNodes();
+    setNodes(nodeList);
+    setConnections(generateConnections(nodeList));
+    setParticles(generateParticles());
+  }, []);
+
+  // Canvas animation
   useEffect(() => {
-    composer.current = new EffectComposer(gl);
-    const renderPass = new RenderPass(scene, camera);
-    composer.current.addPass(renderPass);
+    if (reducedMotion) return;
 
-    const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.3,
-      0.1,
-      0.1
-    );
-    composer.current.addPass(bloomPass);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const draw = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      
+      if (rect.width === 0 || rect.height === 0) return;
+
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, rect.width, rect.height);
+
+      const mouseX = mouseRef.current.x * rect.width;
+      const mouseY = mouseRef.current.y * rect.height;
+
+      // Draw grid
+      ctx.strokeStyle = 'rgba(59, 130, 246, 0.03)';
+      ctx.lineWidth = 0.5;
+      const gridSize = 40;
+      for (let x = 0; x < rect.width; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, rect.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y < rect.height; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(rect.width, y);
+        ctx.stroke();
+      }
+
+      // Draw connections
+      connections.forEach(conn => {
+        const fromNode = nodes.find(n => n.id === conn.from);
+        const toNode = nodes.find(n => n.id === conn.to);
+        if (!fromNode || !toNode) return;
+
+        const fromX = (fromNode.x / 100) * rect.width;
+        const fromY = (fromNode.y / 100) * rect.height;
+        const toX = (toNode.x / 100) * rect.width;
+        const toY = (toNode.y / 100) * rect.height;
+
+        // Mouse interaction
+        const distToMouse = Math.sqrt(
+          Math.pow((fromX + toX) / 2 - mouseX, 2) + 
+          Math.pow((fromY + toY) / 2 - mouseY, 2)
+        );
+        const mouseInfluence = Math.max(0, 1 - distToMouse / 150);
+
+        const gradient = ctx.createLinearGradient(fromX, fromY, toX, toY);
+        gradient.addColorStop(0, `rgba(37, 99, 235, ${0.1 + conn.strength * 0.2 + mouseInfluence * 0.3})`);
+        gradient.addColorStop(0.5, `rgba(6, 182, 212, ${0.15 + conn.strength * 0.25 + mouseInfluence * 0.35})`);
+        gradient.addColorStop(1, `rgba(37, 99, 235, ${0.1 + conn.strength * 0.2 + mouseInfluence * 0.3})`);
+
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 0.8 + conn.strength * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(fromX, fromY);
+        
+        // Bezier curve for elegant connections
+        const midX = (fromX + toX) / 2;
+        const midY = (fromY + toY) / 2;
+        const curveOffset = Math.min(Math.abs(fromX - toX), Math.abs(fromY - toY)) * 0.15;
+        ctx.quadraticCurveTo(midX, midY - curveOffset, toX, toY);
+        ctx.stroke();
+      });
+
+      // Draw nodes
+      nodes.forEach(node => {
+        const x = (node.x / 100) * rect.width;
+        const y = (node.y / 100) * rect.height;
+        
+        const distToMouse = Math.sqrt(Math.pow(x - mouseX, 2) + Math.pow(y - mouseY, 2));
+        const mouseInfluence = Math.max(0, 1 - distToMouse / 100);
+
+        // Glow effect
+        const glowRadius = node.size * 8 + mouseInfluence * 15;
+        const glow = ctx.createRadialGradient(x, y, 0, x, y, glowRadius);
+        
+        if (node.type === 'operation') {
+          glow.addColorStop(0, 'rgba(37, 99, 235, 0.8)');
+          glow.addColorStop(0.3, 'rgba(37, 99, 235, 0.3)');
+          glow.addColorStop(1, 'rgba(37, 99, 235, 0)');
+        } else if (node.type === 'person') {
+          glow.addColorStop(0, 'rgba(6, 182, 212, 0.7)');
+          glow.addColorStop(0.3, 'rgba(6, 182, 212, 0.25)');
+          glow.addColorStop(1, 'rgba(6, 182, 212, 0)');
+        } else if (node.type === 'location') {
+          glow.addColorStop(0, 'rgba(99, 102, 241, 0.6)');
+          glow.addColorStop(0.3, 'rgba(99, 102, 241, 0.2)');
+          glow.addColorStop(1, 'rgba(99, 102, 241, 0)');
+        } else {
+          glow.addColorStop(0, 'rgba(148, 163, 184, 0.5)');
+          glow.addColorStop(0.3, 'rgba(148, 163, 184, 0.15)');
+          glow.addColorStop(1, 'rgba(148, 163, 184, 0)');
+        }
+
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Node circle
+        const nodeColor = node.type === 'operation' ? '#3B82F6' :
+                         node.type === 'person' ? '#06B6D4' :
+                         node.type === 'location' ? '#6366F1' : '#94A3B8';
+        
+        ctx.fillStyle = nodeColor;
+        ctx.beginPath();
+        ctx.arc(x, y, node.size * (1 + mouseInfluence * 0.3), 0, Math.PI * 2);
+        ctx.fill();
+
+        // Inner highlight
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.beginPath();
+        ctx.arc(x - node.size * 0.2, y - node.size * 0.2, node.size * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Ring for central node
+        if (node.type === 'operation') {
+          ctx.strokeStyle = 'rgba(59, 130, 246, 0.5)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(x, y, node.size * 2.5, 0, Math.PI * 2);
+          ctx.stroke();
+          
+          ctx.strokeStyle = 'rgba(59, 130, 246, 0.2)';
+          ctx.lineWidth = 0.5;
+          ctx.beginPath();
+          ctx.arc(x, y, node.size * 4, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      });
+
+      // Draw particles
+      const time = Date.now() * 0.001;
+      particles.forEach((particle, index) => {
+        const x = ((particle.x + Math.sin(time + index) * 0.5 + 100) % 100) * rect.width / 100;
+        const y = ((particle.y + Math.cos(time * 0.7 + index) * 0.3 + 100) % 100) * rect.height / 100;
+        
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.3)';
+        ctx.beginPath();
+        ctx.arc(x, y, particle.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    };
+
+    let frameCount = 0;
+    const animate = () => {
+      frameCount++;
+      // Limit to 30fps for performance
+      if (frameCount % 2 === 0) {
+        draw();
+      }
+      animationRef.current = requestAnimationFrame(animate);
+    };
+
+    animate();
 
     return () => {
-      composer.current?.dispose();
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
     };
-  }, [scene, camera, gl]);
+  }, [nodes, connections, particles, reducedMotion]);
 
-  useFrame(() => {
-    composer.current?.render();
-  }, 1);
+  // Mouse tracking
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = (e.currentTarget as HTMLElement)?.getBoundingClientRect();
+      if (rect) {
+        mouseRef.current.x = (e.clientX - rect.left) / rect.width;
+        mouseRef.current.y = (e.clientY - rect.top) / rect.height;
+        setMousePosition({ 
+          x: mouseRef.current.x, 
+          y: mouseRef.current.y 
+        });
+      }
+    };
 
-  return null;
-}
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.addEventListener('mousemove', handleMouseMove);
+    }
+
+    return () => {
+      if (canvas) {
+        canvas.removeEventListener('mousemove', handleMouseMove);
+      }
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full"
+      style={{ 
+        opacity: reducedMotion ? 0.3 : 0.8,
+        transition: 'opacity 0.3s ease'
+      }}
+    />
+  );
+};
+
+// ============================================
+// OPERATIONAL STATUS INDICATOR
+// ============================================
+
+const OperationalStatus = () => {
+  return (
+    <div className="relative z-10 inline-flex items-center gap-3 px-4 py-2 rounded-lg bg-slate-900/40 backdrop-blur-sm border border-slate-700/50">
+      <div className="flex items-center gap-2">
+        <div className="relative flex h-2.5 w-2.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+        </div>
+        <span className="text-xs font-semibold text-slate-200">SYSTEM OPERATIONAL</span>
+      </div>
+      <div className="w-px h-4 bg-slate-700"></div>
+      <div className="flex items-center gap-1.5">
+        <Activity className="w-3.5 h-3.5 text-cyan-400" />
+        <span className="text-[10px] font-medium text-slate-400 tracking-wider">REAL-TIME WORKFORCE</span>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// RTHC LOGO COMPONENT
+// ============================================
+
+const RTHCLogo = ({ size = 44 }: { size?: number }) => {
+  return (
+    <div 
+      className="relative flex items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 shadow-lg shadow-blue-600/20"
+      style={{ width: size, height: size }}
+    >
+      <svg width={size * 0.65} height={size * 0.65} viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="10" stroke="white" strokeOpacity="0.2" strokeWidth="1.5" />
+        <circle cx="12" cy="12" r="6" stroke="white" strokeOpacity="0.4" strokeWidth="1" />
+        <circle cx="12" cy="12" r="3" fill="white" />
+        <circle cx="12" cy="3" r="1.5" fill="white" />
+        <circle cx="21" cy="12" r="1.5" fill="white" />
+        <circle cx="12" cy="21" r="1.5" fill="white" />
+        <circle cx="3" cy="12" r="1.5" fill="white" />
+        <line x1="12" y1="3" x2="12" y2="6" stroke="white" strokeWidth="0.8" strokeOpacity="0.6" />
+        <line x1="21" y1="12" x2="18" y2="12" stroke="white" strokeWidth="0.8" strokeOpacity="0.6" />
+        <line x1="12" y1="21" x2="12" y2="18" stroke="white" strokeWidth="0.8" strokeOpacity="0.6" />
+        <line x1="3" y1="12" x2="6" y2="12" stroke="white" strokeWidth="0.8" strokeOpacity="0.6" />
+        <line x1="12" y1="6" x2="16" y2="10" stroke="white" strokeWidth="0.8" strokeOpacity="0.4" />
+        <line x1="12" y1="18" x2="16" y2="14" stroke="white" strokeWidth="0.8" strokeOpacity="0.4" />
+        <line x1="8" y1="10" x2="12" y2="6" stroke="white" strokeWidth="0.8" strokeOpacity="0.4" />
+        <line x1="8" y1="14" x2="12" y2="18" stroke="white" strokeWidth="0.8" strokeOpacity="0.4" />
+      </svg>
+    </div>
+  );
+};
+
+// ============================================
+// SECURITY INDICATORS COMPONENT
+// ============================================
+
+const SecurityIndicators = () => {
+  const indicators = [
+    { icon: KeyRound, label: 'Secure Authentication' },
+    { icon: LockKeyhole, label: 'Encrypted Session' },
+    { icon: BadgeCheck, label: 'Enterprise Access' }
+  ];
+
+  return (
+    <div className="flex items-center justify-center gap-4 mt-6 pt-5 border-t border-slate-200">
+      {indicators.map((item, index) => (
+        <React.Fragment key={item.label}>
+          {index > 0 && <div className="w-px h-8 bg-slate-200" />}
+          <div className="flex items-center gap-2">
+            <item.icon className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-[11px] font-medium text-slate-500">{item.label}</span>
+          </div>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+};
 
 // ============================================
 // MAIN LOGIN COMPONENT
@@ -812,27 +461,25 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [mouseX, setMouseX] = useState(0);
-  const [mouseY, setMouseY] = useState(0);
-  const [isSceneReady, setIsSceneReady] = useState(false);
-  const cardRef = useRef<HTMLDivElement>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [accessGranted, setAccessGranted] = useState(false);
+  const [focusedField, setFocusedField] = useState<'email' | 'password' | null>(null);
 
-  // EXISTING AUTH LOGIC - COMPLETELY UNTOUCHED
-  const redirectBasedOnRole = (role: string) => {
-    console.log('🔍 Redirecting with role:', role);
-    
+  // ============================================
+  // EXISTING AUTHENTICATION LOGIC
+  // ============================================
+
+  const redirectBasedOnRole = useCallback((role: string) => {
     if (!role) {
-      console.error('❌ Role is null or undefined');
       toast.error('No role assigned. Contact Administrator.');
       return;
     }
 
     const normalizedRole = role.toUpperCase();
-    console.log('📌 Normalized role:', normalizedRole);
 
     switch (normalizedRole) {
       case 'SUPER_ADMIN':
-        navigate('/dashboard', { replace: true });
+        navigate('/app-select', { replace: true });
         break;
       case 'AREA_ADMIN':
         navigate('/areadashboard', { replace: true });
@@ -841,14 +488,13 @@ export default function Login() {
         navigate('/coordinator', { replace: true });
         break;
       default:
-        console.error('❌ Unknown role:', role);
         toast.error(`Unknown role: ${role}. Please contact support.`);
         supabase.auth.signOut();
         break;
     }
-  };
+  }, [navigate]);
 
-  // EXISTING SESSION CHECK
+  // Session check
   useEffect(() => {
     const checkSession = async () => {
       try {
@@ -866,79 +512,45 @@ export default function Login() {
         }
       } catch (err) {
         console.error('Session check error:', err);
+      } finally {
+        setAuthChecked(true);
       }
     };
     checkSession();
-  }, []);
+  }, [redirectBasedOnRole]);
 
-  // Mouse tracking for 3D interaction
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      const x = (e.clientX / window.innerWidth) * 2 - 1;
-      const y = -(e.clientY / window.innerHeight) * 2 + 1;
-      setMouseX(x);
-      setMouseY(y);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
-
-  // Card tilt effect
-  useEffect(() => {
-    const card = cardRef.current;
-    if (!card) return;
-
-    const handleCardMove = (e: MouseEvent) => {
-      const rect = card.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width - 0.5;
-      const y = (e.clientY - rect.top) / rect.height - 0.5;
-      
-      card.style.transform = `
-        perspective(1000px)
-        rotateY(${x * 6}deg)
-        rotateX(${-y * 6}deg)
-        translateY(${y * -4}px)
-      `;
-    };
-
-    card.addEventListener('mousemove', handleCardMove);
-    card.addEventListener('mouseleave', () => {
-      card.style.transform = 'perspective(1000px) rotateY(0deg) rotateX(0deg) translateY(0px)';
-    });
-
-    return () => {
-      card.removeEventListener('mousemove', handleCardMove);
-      card.removeEventListener('mouseleave', () => {});
-    };
-  }, []);
-
-  // EXISTING LOGIN HANDLER - COMPLETELY UNTOUCHED
-  const handleLogin = async (e: React.FormEvent) => {
+  // LOGIN HANDLER
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
+    
+    if (!email || !password) {
+      setError('Please enter both email and password.');
+      toast.error('Please enter both email and password.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      console.log('🔐 Attempting login for:', email);
-
       const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: email.trim(),
+        password: password,
       });
 
       if (authError) {
-        console.error('❌ Auth error:', authError);
         if (authError.message.includes('Invalid login credentials')) {
           throw new Error('Incorrect email or password. Please try again.');
         }
         if (authError.message.includes('Email not confirmed')) {
-          throw new Error('Please verify your email address.');
+          throw new Error('Please verify your email address. Check your inbox.');
         }
         throw new Error(authError.message);
       }
 
-      console.log('✅ Auth successful for user:', data.user.id);
+      if (!data || !data.user) {
+        throw new Error('Authentication failed. Please try again.');
+      }
 
       const { data: profile, error: profileError } = await supabase
         .from('users')
@@ -947,31 +559,29 @@ export default function Login() {
         .single();
 
       if (profileError) {
-        console.error('❌ Profile fetch error:', profileError);
         await supabase.auth.signOut();
-        throw new Error('No profile found. Contact Administrator.');
+        throw new Error('User profile not found. Contact Administrator.');
       }
 
-      console.log('📋 Profile found:', profile);
-      console.log('👤 Role from database:', profile.role);
-
-      if (profile.status !== 'ACTIVE') {
-        console.error('❌ Account not active:', profile.status);
+      if (profile.status && profile.status.toUpperCase() !== 'ACTIVE') {
         await supabase.auth.signOut();
-        throw new Error('Your account has been disabled.');
+        throw new Error('Your account has been disabled. Contact Administrator.');
       }
 
       if (!profile.role) {
-        console.error('❌ Role is null for user:', profile);
         await supabase.auth.signOut();
         throw new Error('No role assigned. Contact Administrator.');
       }
 
       toast.success(`Welcome back, ${profile.name || 'User'}!`);
-      redirectBasedOnRole(profile.role);
+      
+      setAccessGranted(true);
+      
+      setTimeout(() => {
+        redirectBasedOnRole(profile.role);
+      }, 400);
 
     } catch (err: any) {
-      console.error('❌ Login error:', err);
       const message = err.message || 'Login failed. Please try again.';
       setError(message);
       toast.error(message);
@@ -980,215 +590,369 @@ export default function Login() {
     }
   };
 
-  const version = import.meta.env.VITE_APP_VERSION || '1.0.0';
+  const version = import.meta.env.VITE_APP_VERSION || '2.0.0';
+
+  if (!authChecked) {
+    return (
+      <div className="w-full min-h-dvh flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-4">
+              <DMCFSLogo variant="mark" size="md" />
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+            <p className="text-sm text-slate-600 font-medium">Checking secure session...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-[#e8ecf0]">
-      {/* 3D Scene Background */}
-      <div className="absolute inset-0 z-0">
-        <Canvas
-          camera={{ position: [12, 8, 12], fov: 40 }}
-          dpr={[1, 2]}
-          gl={{ 
-            antialias: true,
-            alpha: false,
-            powerPreference: "high-performance",
-            toneMapping: THREE.ACESFilmicToneMapping,
-            toneMappingExposure: 1.2,
-          }}
-          shadows
-          onCreated={() => setIsSceneReady(true)}
-        >
-          <color attach="background" args={['#e8ecf0']} />
-          <EnterpriseCampus mouseX={mouseX} mouseY={mouseY} />
-          <PostProcessing />
-          <Environment preset="city" background={false} />
-        </Canvas>
-      </div>
+    <div className="relative w-full min-h-dvh overflow-hidden bg-(--color-canvas) text-(--color-text-primary) transition-colors">
+      {/* Background decoration */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(37,99,235,0.05),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(6,182,212,0.03),_transparent_50%)]" />
 
-      {/* Login Overlay */}
-      <div className="absolute inset-0 pointer-events-none z-10 flex items-center justify-center p-4">
+      {/* Grid pattern overlay */}
+      <div className="absolute inset-0 opacity-[0.03]" style={{
+        backgroundImage: `linear-gradient(rgba(15,23,42,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,0.1) 1px, transparent 1px)`,
+        backgroundSize: '32px 32px'
+      }} />
+
+      <div className="relative flex min-h-dvh">
+        {/* ============ LEFT VISUAL SECTION ============ */}
         <motion.div
-          ref={cardRef}
-          initial={{ opacity: 0, y: 30, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ 
-            duration: 1, 
-            ease: [0.16, 1, 0.3, 1],
-            delay: 0.2
-          }}
-          className="pointer-events-auto w-[440px] max-w-[92vw] transition-transform duration-300 ease-out"
-          style={{ transformStyle: 'preserve-3d' }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+          className="hidden min-h-dvh lg:flex w-[55%] xl:w-[58%] flex-col justify-between bg-slate-950 relative overflow-hidden"
         >
-          <div className="relative rounded-[32px] p-8 backdrop-blur-2xl bg-white/30 border border-white/40 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.3),0_0_0_1px_rgba(255,255,255,0.5)_inset]">
-            
-            {/* Glow border effect */}
-            <div className="absolute inset-0 rounded-[32px] bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-blue-500/20 blur-xl" />
-            
-            {/* Logo */}
-            <div className="relative flex items-center gap-3 mb-8">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-lg shadow-blue-500/30">
-                <Shield className="text-white" size={28} />
-              </div>
+          {/* Decorative gradients */}
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
+          <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-blue-600/5 rounded-full blur-3xl" />
+          <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-cyan-500/5 rounded-full blur-3xl" />
+          <div className="absolute top-1/3 right-1/3 w-[300px] h-[300px] bg-indigo-500/5 rounded-full blur-3xl" />
+
+          {/* Network visualization */}
+          <div className="absolute inset-0">
+            <NetworkVisualization />
+          </div>
+
+          {/* Content overlay */}
+          <div className="relative z-10 flex flex-col justify-between h-full p-10 xl:p-14">
+            {/* Top - Logo and branding */}
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.6, ease: 'easeOut' }}
+              className="flex items-center gap-3"
+            >
+                <DMCFSLogo variant="mark" size="md" />
               <div>
-                <span className="text-3xl font-bold text-gray-900 tracking-tight">RTHC</span>
-                <p className="text-[10px] text-gray-400 font-semibold tracking-[0.2em] uppercase">Real Time Head Count</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl font-bold text-white tracking-tight">RTHC</span>
+                  <span className="text-[10px] font-semibold text-slate-400 bg-slate-800/50 px-2 py-0.5 rounded-full border border-slate-700/50">
+                    DMCFS
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-medium tracking-[0.2em] uppercase mt-0.5">
+                  Real Time Head Count
+                </p>
+              </div>
+            </motion.div>
+
+            {/* Middle - Main message */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4, duration: 0.6, ease: 'easeOut' }}
+              className="max-w-md"
+            >
+              <h1 className="text-4xl xl:text-5xl font-bold text-white leading-tight tracking-tight mb-4">
+                Workforce Intelligence
+                <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
+                  in Real-Time
+                </span>
+              </h1>
+              <p className="text-slate-400 text-sm xl:text-base leading-relaxed">
+                Enterprise-grade operational command center for managing distributed workforce across multiple locations.
+              </p>
+              
+              <div className="flex flex-col gap-2 mt-6">
+                {[
+                  { icon: Users, text: 'Centralized headcount management' },
+                  { icon: Network, text: 'Real-time location tracking' },
+                  { icon: Database, text: 'Integrated enterprise systems' }
+                ].map((item, index) => (
+                  <motion.div
+                    key={item.text}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.6 + index * 0.1, duration: 0.5 }}
+                    className="flex items-center gap-2.5 text-slate-300"
+                  >
+                    <item.icon className="w-4 h-4 text-blue-400" />
+                    <span className="text-sm">{item.text}</span>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Bottom - Status */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.8, duration: 0.6, ease: 'easeOut' }}
+              className="flex flex-col gap-4"
+            >
+              <OperationalStatus />
+              
+              <div className="flex items-center gap-4 text-[10px] text-slate-500 font-medium">
+                <span className="flex items-center gap-1.5">
+                  <Globe className="w-3.5 h-3.5" />
+                  Enterprise Platform
+                </span>
+                <span className="w-px h-3 bg-slate-700" />
+                <span className="flex items-center gap-1.5">
+                  <Server className="w-3.5 h-3.5" />
+                  Version {version}
+                </span>
+              </div>
+            </motion.div>
+          </div>
+        </motion.div>
+
+        {/* ============ RIGHT LOGIN SECTION ============ */}
+        <div className="flex min-h-dvh flex-1 items-center justify-center bg-(--color-canvas) p-6 transition-colors sm:p-8 lg:p-12">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            className="w-full max-w-[440px]"
+          >
+            {/* Logo for mobile */}
+            <div className="lg:hidden flex items-center justify-center mb-8">
+              <div className="flex items-center gap-3">
+                <DMCFSLogo variant="mark" size="md" />
+                <div>
+                  <span className="text-xl font-bold text-(--color-text-primary) tracking-tight">RTHC</span>
+                  <p className="text-[9px] text-slate-500 font-semibold tracking-[0.2em] uppercase dark:text-slate-400">
+                    Real Time Head Count
+                  </p>
+                </div>
               </div>
             </div>
 
             {/* Welcome */}
-            <div className="relative mb-8">
-              <h2 className="text-4xl font-bold text-gray-900 tracking-tight">Welcome Back</h2>
-              <p className="text-sm text-gray-500 mt-1 font-medium">
-                Enterprise platform access
+            <div className="mb-8">
+              <h2 className="text-2xl sm:text-3xl font-bold text-(--color-text-primary) tracking-tight">
+                Welcome back
+              </h2>
+              <p className="text-sm text-slate-500 mt-2 dark:text-slate-400">
+                Sign in to your workforce operations workspace.
               </p>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleLogin} className="relative space-y-5">
+            {/* Login form */}
+            <form onSubmit={handleLogin} className="space-y-5">
+              {/* Email */}
               <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
+                <label 
+                  htmlFor="email"
+                  className={`block text-xs font-semibold mb-2 transition-colors duration-200 ${
+                    focusedField === 'email' ? 'text-blue-600' : 'text-slate-600 dark:text-slate-300'
+                  }`}
+                >
                   Email address
                 </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@company.com"
-                  className="w-full px-4 py-3.5 rounded-2xl border border-gray-200/60 bg-white/40 backdrop-blur-sm text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all duration-200"
-                  disabled={loading}
-                  required
-                />
+                <div className={`relative transition-all duration-200 ${
+                  focusedField === 'email' ? 'scale-[1.01]' : ''
+                }`}>
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Mail className={`w-4 h-4 transition-colors duration-200 ${
+                      focusedField === 'email' ? 'text-blue-600' : 'text-slate-400'
+                    }`} />
+                  </div>
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    onFocus={() => setFocusedField('email')}
+                    onBlur={() => setFocusedField(null)}
+                    placeholder="name@company.com"
+                    autoComplete="email"
+                    className={`w-full h-[52px] pl-11 pr-4 rounded-xl border bg-(--color-card) text-sm text-(--color-text-primary) placeholder:text-(--color-text-muted) transition-all duration-200 outline-none ${
+                      focusedField === 'email'
+                        ? 'border-blue-500 ring-2 ring-blue-500/15 shadow-sm'
+                        : 'border-(--color-border-strong) hover:border-(--color-primary)'
+                    }`}
+                    disabled={loading}
+                    required
+                  />
+                </div>
               </div>
 
+              {/* Password */}
               <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
+                <label 
+                  htmlFor="password"
+                  className={`block text-xs font-semibold mb-2 transition-colors duration-200 ${
+                    focusedField === 'password' ? 'text-blue-600' : 'text-slate-600 dark:text-slate-300'
+                  }`}
+                >
                   Password
                 </label>
-                <div className="relative">
+                <div className={`relative transition-all duration-200 ${
+                  focusedField === 'password' ? 'scale-[1.01]' : ''
+                }`}>
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Lock className={`w-4 h-4 transition-colors duration-200 ${
+                      focusedField === 'password' ? 'text-blue-600' : 'text-slate-400'
+                    }`} />
+                  </div>
                   <input
+                    id="password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full px-4 py-3.5 pr-12 rounded-2xl border border-gray-200/60 bg-white/40 backdrop-blur-sm text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all duration-200"
+                    onFocus={() => setFocusedField('password')}
+                    onBlur={() => setFocusedField(null)}
+                    placeholder="Enter your password"
+                    autoComplete="current-password"
+                    className={`w-full h-[52px] pl-11 pr-12 rounded-xl border bg-(--color-card) text-sm text-(--color-text-primary) placeholder:text-(--color-text-muted) transition-all duration-200 outline-none ${
+                      focusedField === 'password'
+                        ? 'border-blue-500 ring-2 ring-blue-500/15 shadow-sm'
+                        : 'border-(--color-border-strong) hover:border-(--color-primary)'
+                    }`}
                     disabled={loading}
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
-                    disabled={loading}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                    tabIndex={-1}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
               </div>
 
+              {/* Remember & Forgot */}
               <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2.5 text-sm text-gray-600 cursor-pointer group">
+                <label className="flex items-center gap-2.5 cursor-pointer group">
                   <input
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500/20 focus:ring-2 transition"
+                    className="peer sr-only"
                     disabled={loading}
                   />
-                  <span className="font-medium group-hover:text-gray-900 transition">Remember me</span>
+                  <div className={`w-4.5 h-4.5 rounded-md border-2 flex items-center justify-center transition-all duration-200 ${
+                    rememberMe 
+                      ? 'bg-blue-600 border-blue-600' 
+                      : 'border-slate-300 group-hover:border-slate-400 dark:border-slate-600 dark:group-hover:border-slate-500'
+                  }`}>
+                    {rememberMe && (
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                        <path d="M1.5 5.5L4 8L8.5 2.5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </div>
+                  <span className="text-sm text-slate-600 group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-white transition-colors">
+                    Remember me
+                  </span>
                 </label>
                 <button
                   type="button"
-                  className="text-sm font-medium text-blue-600 hover:text-blue-700 transition"
+                  className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
                   onClick={() => toast.info('Password reset feature coming soon')}
                 >
-                  Forgot Password?
+                  Forgot password?
                 </button>
               </div>
 
+              {/* Error */}
               <AnimatePresence>
                 {error && (
                   <motion.div
-                    initial={{ opacity: 0, y: -10, height: 0 }}
+                    initial={{ opacity: 0, y: -8, height: 0 }}
                     animate={{ opacity: 1, y: 0, height: 'auto' }}
-                    exit={{ opacity: 0, y: -10, height: 0 }}
-                    className="flex items-start gap-3 p-3.5 rounded-2xl bg-red-50/80 backdrop-blur-sm border border-red-100/60"
+                    exit={{ opacity: 0, y: -8, height: 0 }}
+                    transition={{ duration: 0.25 }}
+                    className="overflow-hidden"
                   >
-                    <AlertCircle size={16} className="text-red-500 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-red-700 font-medium">{error}</span>
+                    <div className="flex items-start gap-2.5 p-3.5 rounded-lg bg-red-50 border border-red-100">
+                      <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-sm text-red-700 font-medium">{error}</span>
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              <button
+              {/* Access granted */}
+              <AnimatePresence>
+                {accessGranted && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8, height: 0 }}
+                    animate={{ opacity: 1, y: 0, height: 'auto' }}
+                    exit={{ opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="flex items-center gap-2.5 p-3.5 rounded-lg bg-emerald-50 border border-emerald-100">
+                      <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                      <span className="text-sm text-emerald-700 font-medium">Access granted</span>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Sign in button */}
+              <motion.button
                 type="submit"
                 disabled={loading || !email || !password}
-                className="relative w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden group transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/30"
+                className="relative w-full h-[52px] rounded-xl bg-blue-600 text-white font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden group"
+                whileHover={{ scale: loading ? 1 : 1.005 }}
+                whileTap={{ scale: loading ? 1 : 0.99 }}
+                transition={{ duration: 0.15 }}
               >
+                <span className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-700 group-hover:from-blue-500 group-hover:to-blue-600 transition-all duration-300" />
+                <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
                 <span className="relative flex items-center justify-center gap-2.5">
                   {loading ? (
                     <>
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      <span>Signing in...</span>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Authenticating...</span>
                     </>
                   ) : (
                     <>
-                      <LogIn size={18} />
-                      <span>Sign In</span>
+                      <LogIn className="w-4 h-4" />
+                      <span>Sign in</span>
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                     </>
                   )}
                 </span>
-              </button>
+              </motion.button>
             </form>
 
-            {/* Divider */}
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-200/50" />
-              </div>
-              <div className="relative flex justify-center">
-                <span className="px-3 bg-white/40 backdrop-blur-sm text-xs text-gray-400 font-medium uppercase tracking-wider">
-                  Or continue with
-                </span>
-              </div>
-            </div>
-
-            {/* SSO Buttons */}
-            <div className="relative grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                className="flex items-center justify-center gap-2.5 py-3 rounded-2xl border border-gray-200/50 bg-white/30 backdrop-blur-sm text-sm font-medium text-gray-700 hover:bg-white/50 hover:border-gray-300 transition-all"
-                onClick={() => toast.info('Microsoft SSO coming soon')}
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.04-3.91 1.184-4.96 3.008-2.117 3.656-.54 9.064 1.52 12.03 1.008 1.456 2.208 3.086 3.792 3.024 1.52-.064 2.096-.984 3.936-.984 1.824 0 2.336.984 3.92.944 1.616-.04 2.64-1.472 3.648-2.928 1.136-1.632 1.6-3.216 1.632-3.296-.032-.016-3.136-1.2-3.168-4.768-.032-2.992 2.432-4.416 2.544-4.496-1.392-2.048-3.552-2.288-4.304-2.288-1.92-.032-2.992 1.072-3.968 1.072z"/>
-                </svg>
-                Microsoft
-              </button>
-              <button
-                type="button"
-                className="flex items-center justify-center gap-2.5 py-3 rounded-2xl border border-gray-200/50 bg-white/30 backdrop-blur-sm text-sm font-medium text-gray-700 hover:bg-white/50 hover:border-gray-300 transition-all"
-                onClick={() => toast.info('Google SSO coming soon')}
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.478,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/>
-                </svg>
-                Google
-              </button>
-            </div>
+            {/* Security indicators */}
+            <SecurityIndicators />
 
             {/* Footer */}
-            <div className="relative mt-6 pt-4 border-t border-gray-200/30 flex items-center justify-between">
-              <span className="text-[10px] text-gray-400 font-medium tracking-wider">
-                Version {version}
-              </span>
-              <span className="flex items-center gap-1.5 text-[10px] text-gray-300 font-semibold tracking-widest">
-                <Zap size={10} className="text-blue-500" />
-                POWERED BY DMCFS
+            <div className="flex items-center justify-center gap-3 mt-4 text-[10px] text-slate-400 font-medium">
+              <span>Version {version}</span>
+              <span className="w-px h-3 bg-slate-200" />
+              <span className="flex items-center gap-1">
+                <Shield className="w-3 h-3 text-blue-500" />
+                DMCFS Enterprise
               </span>
             </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        </div>
       </div>
     </div>
   );

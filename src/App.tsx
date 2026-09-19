@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Moon, Sun } from "lucide-react";
 
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -12,9 +13,14 @@ import Locations from "./pages/Locations";
 import Coordinators from "./pages/Coordinators";
 import Analytics from "./pages/Analytics";
 import Headcount from "./pages/Headcount";
+import CompanyDashboard from "./pages/CompanyDashboard";
+import ApplicationSelection from "./pages/ApplicationSelection";
+import RTCADashboard from "./pages/RTCADashboardPremium";
 
 import ProtectedRoute from "./auth/ProtectedRoute";
 import RoleGuard from "./auth/RoleGuard";
+import { useTheme } from "./lib/theme/ThemeProvider";
+
 
 // 🌌 Global 3D background
 // import GlobalThreeBackground from "./components/GlobalThreeBackground";
@@ -22,9 +28,26 @@ import RoleGuard from "./auth/RoleGuard";
 // import UltimateThreeBackground from "./components/UltimateThreeBackground";
 
 
+function GlobalThemeToggle() {
+  const { isDark, toggleTheme } = useTheme();
+
+  return (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      className="fixed right-4 top-4 z-[100] inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-lg backdrop-blur transition hover:scale-105 hover:bg-white dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800"
+      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+    >
+      {isDark ? <Sun className="h-5 w-5 text-amber-300" /> : <Moon className="h-5 w-5" />}
+    </button>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
+      <GlobalThemeToggle />
       {/* Subtle particle field – fixed, behind everything */}
       {/* <GlobalThreeBackground />
        <CherryBlossomBackground /> */}
@@ -34,6 +57,28 @@ export default function App() {
       <Routes>
         {/* Public */}
         <Route path="/" element={<Login />} />
+
+        <Route
+          path="/app-select"
+          element={
+            <ProtectedRoute>
+              <RoleGuard allowedRoles={["SUPER_ADMIN"]}>
+                <ApplicationSelection />
+              </RoleGuard>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/rtca"
+          element={
+            <ProtectedRoute>
+              <RoleGuard allowedRoles={["SUPER_ADMIN", "AREA_ADMIN"]}>
+                <RTCADashboard />
+              </RoleGuard>
+            </ProtectedRoute>
+          }
+        />
 
         {/* Super Admin */}
         <Route
@@ -65,6 +110,20 @@ export default function App() {
             <ProtectedRoute>
               <Profile />
             </ProtectedRoute>
+          }
+        />
+
+        
+        <Route
+          path="/coordinator/profile"
+          element={
+            
+            <ProtectedRoute>
+              <RoleGuard allowedRoles={["COORDINATOR"]}>
+              <Profile />
+              </RoleGuard>
+            </ProtectedRoute>
+
           }
         />
 
@@ -133,6 +192,19 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+
+        <Route
+          path="/reports"
+          element={
+            <ProtectedRoute>
+              <RoleGuard allowedRoles={"SUPER_ADMIN"}>
+                <CompanyDashboard />
+              </RoleGuard>
+            </ProtectedRoute>
+          }
+        />
+
+
 
         {/* Unauthorized */}
         <Route

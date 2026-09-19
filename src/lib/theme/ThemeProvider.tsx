@@ -5,6 +5,14 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const STORAGE_KEY = "rthc-theme";
 
+function applyThemeToDocument(next: "light" | "dark") {
+  const isDark = next === "dark";
+  for (const element of [document.documentElement, document.body, document.getElementById("root")]) {
+    element?.classList.toggle("dark", isDark);
+  }
+  document.documentElement.style.colorScheme = next;
+}
+
 function resolveTheme(mode: ThemeMode): "light" | "dark" {
   if (mode === "system") {
     if (typeof window === "undefined") return "light";
@@ -27,8 +35,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const next = resolveTheme(mode);
     setResolvedMode(next);
-    document.documentElement.classList.toggle("dark", next === "dark");
-    document.documentElement.style.colorScheme = next;
+    applyThemeToDocument(next);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STORAGE_KEY, mode);
     }
@@ -40,8 +47,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const handleChange = () => {
       const next = resolveTheme("system");
       setResolvedMode(next);
-      document.documentElement.classList.toggle("dark", next === "dark");
-      document.documentElement.style.colorScheme = next;
+      applyThemeToDocument(next);
     };
 
     handleChange();

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Search, Plus, Edit, Trash2,
-  ChevronUp, ChevronDown, Filter, X
+  ChevronUp, ChevronDown, Filter, X, Building2, MapPin
 } from "lucide-react";
 import toast from "react-hot-toast";
 // @ts-ignore
@@ -23,7 +23,11 @@ interface Location {
   contact_person?: string;
   mobile?: string;
   status?: string;
-  company?: { company_name: string } | null;
+}
+
+interface Company {
+  id: string;
+  company_name: string;
 }
 
 // ---------- Status Badge ----------
@@ -46,6 +50,7 @@ export default function Locations() {
 
   const [loading, setLoading] = useState(true);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [companiesMap, setCompaniesMap] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
   const [sortKey, setSortKey] = useState<keyof Location | "company_name">("location_name");
@@ -65,17 +70,52 @@ export default function Locations() {
     return () => observer.disconnect();
   }, []);
 
-  // ---------- Fetch Locations ----------
+  // ---------- Fetch Locations (simplified) ----------
   const fetchLocations = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      console.log("🔄 Fetching locations...");
+
+      // 1. Get all locations
+      const { data: locationsData, error: locError } = await supabase
         .from("locations")
-        .select("*, company:companies ( company_name )")
+        .select("id, company_id, location_name, location_code, address, city, state, contact_person, mobile, status")
         .order("location_name", { ascending: true });
-      if (error) throw error;
-      setLocations(data || []);
+
+      if (locError) {
+        console.error("❌ Error fetching locations:", locError);
+        throw locError;
+      }
+
+      console.log(`✅ Found ${locationsData?.length || 0} locations`);
+
+      // 2. Get all companies for lookup
+      const { data: companiesData, error: compError } = await supabase
+        .from("companies")
+        .select("id, company_name")
+        .eq("status", "ACTIVE");
+
+      if (compError) {
+        console.error("❌ Error fetching companies:", compError);
+      }
+
+      // 3. Build company lookup map
+      const companyMap: Record<string, string> = {};
+      (companiesData || []).forEach((c: Company) => {
+        companyMap[c.id] = c.company_name;
+      });
+
+      setLocations(locationsData || []);
+      setCompaniesMap(companyMap);
+
+      console.log("✅ Locations loaded successfully");
+      console.log("📊 Stats:", {
+        locations: locationsData?.length || 0,
+        companies: Object.keys(companyMap).length
+      });
+
     } catch (err: any) {
+      console.error("❌ Failed to load locations:", err);
       toast.error("Failed to load locations: " + err.message);
     } finally {
       setLoading(false);
@@ -96,10 +136,11 @@ export default function Locations() {
       list = list.filter(
         (loc) =>
           loc.location_name.toLowerCase().includes(s) ||
-          loc.location_code?.toLowerCase().includes(s) ||
-          loc.company?.company_name?.toLowerCase().includes(s) ||
-          loc.city?.toLowerCase().includes(s) ||
-          loc.contact_person?.toLowerCase().includes(s)
+          (loc.location_code || "").toLowerCase().includes(s) ||
+          (companiesMap[loc.company_id || ""] || "").toLowerCase().includes(s) ||
+          (loc.city || "").toLowerCase().includes(s) ||
+          (loc.contact_person || "").toLowerCase().includes(s) ||
+          (loc.state || "").toLowerCase().includes(s)
       );
     }
 
@@ -112,8 +153,8 @@ export default function Locations() {
     list.sort((a: any, b: any) => {
       let aVal: any, bVal: any;
       if (sortKey === "company_name") {
-        aVal = (a.company?.company_name || "").toLowerCase();
-        bVal = (b.company?.company_name || "").toLowerCase();
+        aVal = (companiesMap[a.company_id || ""] || "").toLowerCase();
+        bVal = (companiesMap[b.company_id || ""] || "").toLowerCase();
       } else {
         aVal = a[sortKey] || "";
         bVal = b[sortKey] || "";
@@ -126,7 +167,7 @@ export default function Locations() {
     });
 
     return list;
-  }, [locations, search, statusFilter, sortKey, sortAsc]);
+  }, [locations, companiesMap, search, statusFilter, sortKey, sortAsc]);
 
   const totalPages = Math.ceil(filtered.length / perPage);
   const paginated = filtered.slice((page - 1) * perPage, page * perPage);
@@ -145,7 +186,7 @@ export default function Locations() {
     try {
       const { error } = await supabase.from("locations").delete().eq("id", id);
       if (error) throw error;
-      toast.success("Location deleted");
+      toast.success("Location deleted successfully");
       fetchLocations();
     } catch (err: any) {
       toast.error("Delete failed: " + err.message);
@@ -186,7 +227,7 @@ export default function Locations() {
               Locations
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Manage all registered locations.
+              Manage all registered locations across your companies.
             </p>
           </div>
           <button
@@ -277,7 +318,9 @@ export default function Locations() {
                 ) : paginated.length === 0 ? (
                   <tr>
                     <td colSpan={columns.length + 1} className="px-4 py-8 text-center text-slate-400 dark:text-slate-500">
-                      No locations found.
+                      {locations.length === 0 
+                        ? "No locations found. Click 'Add Location' to create one." 
+                        : "No locations match your filters."}
                     </td>
                   </tr>
                 ) : (
@@ -287,13 +330,21 @@ export default function Locations() {
                       className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
                     >
                       <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">
-                        {location.location_name}
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-indigo-500" />
+                          {location.location_name}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
-                        {location.location_code || "—"}
+                        <code className="text-xs bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">
+                          {location.location_code || "—"}
+                        </code>
                       </td>
                       <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
-                        {location.company?.company_name || "—"}
+                        <div className="flex items-center gap-1">
+                          <Building2 className="w-3 h-3 text-slate-400" />
+                          {location.company_id ? companiesMap[location.company_id] || "—" : "—"}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-slate-700 dark:text-slate-300 max-w-[200px] truncate">
                         {location.address || "—"}
@@ -317,7 +368,7 @@ export default function Locations() {
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => {
-                              // edit: will open modal with location selected
+                              // Pass location ID to modal for editing
                               setModalOpen(true);
                             }}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"

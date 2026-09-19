@@ -31,6 +31,28 @@ export const fetchLocationsByCompany = async (companyId) => {
   return data;
 };
 
+export const fetchActiveSchemes = async () => {
+  const { data, error } = await supabase
+    .from("schemes")
+    .select("id, scheme_name")
+    .eq("status", "ACTIVE")
+    .order("scheme_name");
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const createSchemeRequirement = async (payload) => {
+  const { data, error } = await supabase
+    .from("scheme_requirements")
+    .insert(payload)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
 export const createHeadcountUpdate = async (payload) => {
   console.log("========== PAYLOAD ==========");
   console.log(payload);

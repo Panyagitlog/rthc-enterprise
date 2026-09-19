@@ -10,6 +10,7 @@ import { useTheme } from "../hooks/useTheme";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
 import HeroWelcome from "../components/dashboard/HeroWelcome";
 import KpiGrid from "../components/dashboard/KpiGrid";
+import KpiGrid1 from "../components/dashboard/KpiGrid1";
 import ChartsPanel from "../components/dashboard/charts/ChartsPanel";
 import HeadcountTable from "../components/dashboard/HeadcountTable";
 import LiveActivityFeed from "../components/dashboard/LiveActivityFeed";
@@ -114,7 +115,9 @@ export default function Dashboard() {
         </section>
 
         <div className="animate-in fade-in space-y-8" style={{ animationDelay: "40ms" }}>
-          <KpiGrid kpis={kpis} />
+            <KpiGrid kpis={kpis} />
+            <KpiGrid1 kpis={kpis} />
+
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
             <div className="space-y-6 lg:col-span-3">

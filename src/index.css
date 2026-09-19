@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --color-canvas: #f8fafc;
   --color-card: #ffffff;
@@ -10,10 +12,9 @@
   --color-text-secondary: #475569;
   --color-text-muted: #64748b;
   
-  /* 🔸 CHANGED: Orange palette - Light */
-  --color-primary: #F97316;
-  --color-primary-hover: #EA580C;
-  --color-primary-tint: rgba(249, 115, 22, 0.12);
+  --color-primary: #FF6600;
+  --color-primary-hover: #E65C00;
+  --color-primary-tint: rgba(255, 102, 0, 0.12);
   
   --color-success: #16a34a;
   --color-success-tint: rgba(22, 163, 74, 0.12);
@@ -25,8 +26,7 @@
   --color-neutral-tint: rgba(100, 116, 139, 0.12);
   --color-chart-grid: #e2e8f0;
   
-  /* 🔸 CHANGED: Chart line color */
-  --color-chart-line: #F97316;
+  --color-chart-line: #FF6600;
   
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
   --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.08);
@@ -52,10 +52,9 @@
   --color-text-secondary: #cbd5e1;
   --color-text-muted: #94a3b8;
   
-  /* 🔸 CHANGED: Orange palette - Dark */
-  --color-primary: #FB923C;
-  --color-primary-hover: #FDBA74;
-  --color-primary-tint: rgba(251, 146, 60, 0.16);
+  --color-primary: #FF8330;
+  --color-primary-hover: #FFA157;
+  --color-primary-tint: rgba(255, 131, 48, 0.16);
   
   --color-success: #22c55e;
   --color-success-tint: rgba(34, 197, 94, 0.14);
@@ -67,8 +66,7 @@
   --color-neutral-tint: rgba(148, 163, 184, 0.16);
   --color-chart-grid: #1e293b;
   
-  /* 🔸 CHANGED: Chart line color - Dark */
-  --color-chart-line: #FB923C;
+  --color-chart-line: #FF8330;
   
   --shadow-sm: 0 1px 2px rgba(2, 6, 23, 0.35);
   --shadow-md: 0 14px 40px rgba(2, 6, 23, 0.38);
@@ -104,6 +102,8 @@
 }
 
 html {
+  width: 100%;
+  min-height: 100%;
   background-color: var(--color-canvas);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
@@ -112,7 +112,9 @@ html {
 
 body {
   margin: 0;
+  width: 100%;
   min-height: 100vh;
+  overflow-x: hidden;
   background-color: var(--color-canvas);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
@@ -133,7 +135,8 @@ body {
 }
 
 #root {
-  min-height: 100vh;
+  width: 100%;
+  min-height: 100dvh;
 }
 
 ::selection {
@@ -150,6 +153,10 @@ body {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
   border-radius: 8px;
+}
+
+.recharts-cartesian-grid line {
+  stroke: var(--color-chart-grid);
 }
 
 /* ========== 3D Effects & Glass Morphism ========== */
@@ -284,16 +291,6 @@ body {
 }
 
 html, body, #root {
-  background: transparent !important;
-}
-
-.dashboard-card,
-.bg-white,
-.bg-card,
-header,
-aside,
-main,
-.bg-canvas {
-  background-color: var(--color-card, #ffffff) !important;
-  transition: background-color 220ms var(--ease-standard);
+  background-color: var(--color-canvas);
+  color: var(--color-text-primary);
 }

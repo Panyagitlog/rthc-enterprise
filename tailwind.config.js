@@ -26,19 +26,19 @@ module.exports = {
           DEFAULT: '#e2e8f0',
           strong: '#cbd5e1',
         },
-        // 🔸 CHANGED: Primary color now matches DMCFS orange logo
+        // Brand primary — matches the DMCFS logo orange (#FF6600)
         primary: {
-          DEFAULT: '#F97316',     // Bright orange
-          50: '#fff7ed',
-          100: '#ffedd5',
-          200: '#fed7aa',
-          300: '#fdba74',
-          400: '#fb923c',
-          500: '#F97316',         // Main brand color
-          600: '#ea580c',
-          700: '#c2410c',
-          800: '#9a3412',
-          900: '#7c2d12',
+          DEFAULT: '#FF6600',
+          50: '#FFF3EA',
+          100: '#FFE1C7',
+          200: '#FFC28F',
+          300: '#FFA157',
+          400: '#FF8330',
+          500: '#FF6600',
+          600: '#E65C00',
+          700: '#B84A00',
+          800: '#8A3800',
+          900: '#5C2500',
         },
       },
     },
