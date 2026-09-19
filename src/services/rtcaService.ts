@@ -5,11 +5,6 @@ import type { RTCAFilters, RTCARecord, RTCARow, RTCAStats } from "../types/rtca"
 type NamedRow = { id: string; company_name?: string; location_name?: string; name?: string };
 type CurrentUserScope = { role: string | null; companyId: string | null; locationId: string | null };
 
-// Real workforce entries live in `headcount_updates` (there is no populated
-// "schemes"/"scheme_requirements" table). Each shift is treated as the
-// "scheme" dimension the dashboard UI already expects.
-const SHIFTS = ["Morning", "Evening", "Night"];
-
 async function getCurrentUserScope(): Promise<CurrentUserScope> {
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError || !authData?.user) {
@@ -52,36 +47,81 @@ function toRecord(row: any): RTCARecord {
   };
 }
 
+// Scheme submissions (NAPS/NATS/WILP etc.) are stored in `scheme_requirements`,
+// a separate table from the shift-based `headcount_updates` entries.
+function toSchemeRecord(row: any): RTCARecord {
+  const requirement = Number(row.requirement || 0);
+  const filled = Number(row.filled || 0);
+  return {
+    id: row.id,
+    company_id: row.company_id,
+    location_id: row.location_id,
+    scheme_id: row.scheme_id,
+    coordinator_id: row.coordinator_id,
+    requirement,
+    filled,
+    vacant: Number(requirement - filled),
+    remarks: row.remarks ?? null,
+    report_date: row.report_date,
+    updated_at: row.updated_at || row.report_date,
+  };
+}
+
 export async function fetchRTCAData(filters: RTCAFilters): Promise<{ rows: RTCARow[]; stats: RTCAStats }> {
   const scope = await getCurrentUserScope();
 
   let recordsQuery = supabase.from("headcount_updates").select("*").order("created_at", { ascending: false });
+  let schemeQuery = supabase.from("scheme_requirements").select("*").order("updated_at", { ascending: false });
 
   if (scope.role === "COORDINATOR" && scope.companyId && scope.locationId) {
     recordsQuery = recordsQuery.eq("company_id", scope.companyId).eq("location_id", scope.locationId);
+    schemeQuery = schemeQuery.eq("company_id", scope.companyId).eq("location_id", scope.locationId);
   } else {
-    if (filters.companyId) recordsQuery = recordsQuery.eq("company_id", filters.companyId);
-    if (filters.locationId) recordsQuery = recordsQuery.eq("location_id", filters.locationId);
+    if (filters.companyId) {
+      recordsQuery = recordsQuery.eq("company_id", filters.companyId);
+      schemeQuery = schemeQuery.eq("company_id", filters.companyId);
+    }
+    if (filters.locationId) {
+      recordsQuery = recordsQuery.eq("location_id", filters.locationId);
+      schemeQuery = schemeQuery.eq("location_id", filters.locationId);
+    }
   }
 
-  if (filters.schemeId) recordsQuery = recordsQuery.eq("shift", filters.schemeId);
-  if (filters.coordinatorId) recordsQuery = recordsQuery.eq("coordinator_id", filters.coordinatorId);
-  if (filters.dateFrom) recordsQuery = recordsQuery.gte("created_at", `${filters.dateFrom}T00:00:00`);
-  if (filters.dateTo) recordsQuery = recordsQuery.lte("created_at", `${filters.dateTo}T23:59:59.999`);
+  if (filters.coordinatorId) {
+    recordsQuery = recordsQuery.eq("coordinator_id", filters.coordinatorId);
+    schemeQuery = schemeQuery.eq("coordinator_id", filters.coordinatorId);
+  }
+  if (filters.dateFrom) {
+    recordsQuery = recordsQuery.gte("created_at", `${filters.dateFrom}T00:00:00Z`);
+    schemeQuery = schemeQuery.gte("report_date", filters.dateFrom);
+  }
+  if (filters.dateTo) {
+    recordsQuery = recordsQuery.lte("created_at", `${filters.dateTo}T23:59:59.999Z`);
+    schemeQuery = schemeQuery.lte("report_date", filters.dateTo);
+  }
+
+  // A real scheme filter (WILP/NAPS/NATS) only ever matches `scheme_requirements` rows.
+  if (filters.schemeId) {
+    schemeQuery = schemeQuery.eq("scheme_id", filters.schemeId);
+  }
 
   const [
     { data: records, error: recordsError },
+    { data: schemeRecords, error: schemeRecordsError },
     { data: companiesData, error: companiesError },
     { data: locationsData, error: locationsError },
     { data: coordinatorsData, error: coordinatorsError },
+    { data: schemesData, error: schemesError },
   ] = await Promise.all([
-    recordsQuery,
+    filters.schemeId ? Promise.resolve({ data: [], error: null }) : recordsQuery,
+    schemeQuery,
     supabase.from("companies").select("id, company_name").order("company_name"),
     supabase.from("locations").select("id, location_name, company_id, state, city").order("location_name"),
     supabase.from("users").select("id, name, company_id, location_id").eq("role", "COORDINATOR").order("name"),
+    supabase.from("schemes").select("id, scheme_name").order("scheme_name"),
   ]);
 
-  const error = recordsError || companiesError || locationsError || coordinatorsError;
+  const error = recordsError || schemeRecordsError || companiesError || locationsError || coordinatorsError || schemesError;
   if (error) throw error;
 
   let companies = companiesData || [];
@@ -107,8 +147,14 @@ export async function fetchRTCAData(filters: RTCAFilters): Promise<{ rows: RTCAR
   const companyMap = new Map((companies || []).map((item: NamedRow) => [item.id, item.company_name || "Unknown company"]));
   const locationMap = new Map((locations || []).map((item: any) => [item.id, item]));
   const coordinatorMap = new Map((coordinators || []).map((item: NamedRow) => [item.id, item.name || "Unknown coordinator"]));
+  const schemeNameMap = new Map((schemesData || []).map((item: any) => [item.id, item.scheme_name]));
 
-  const rows = ((records || []).map(toRecord) as RTCARecord[]).map((record) => {
+  const combinedRecords: RTCARecord[] = [
+    ...(records || []).map(toRecord),
+    ...(schemeRecords || []).map(toSchemeRecord),
+  ];
+
+  const rows = combinedRecords.map((record) => {
     const location = locationMap.get(record.location_id) || {};
     return {
       ...record,
@@ -117,7 +163,7 @@ export async function fetchRTCAData(filters: RTCAFilters): Promise<{ rows: RTCAR
       stateName: location.state || "Unknown",
       cityName: location.city || "Unknown",
       districtName: location.city || "Unknown",
-      schemeName: record.scheme_id,
+      schemeName: schemeNameMap.get(record.scheme_id) || record.scheme_id,
       coordinatorName: coordinatorMap.get(record.coordinator_id) || "Unknown coordinator",
     };
   });
@@ -158,13 +204,14 @@ export async function fetchRTCAOptions() {
     }
   }
 
-  const [{ data: companies }, { data: locations }, { data: coordinators }] = await Promise.all([
+  const [{ data: companies }, { data: locations }, { data: coordinators }, { data: schemesData }] = await Promise.all([
     baseCompanyQuery,
     baseLocationQuery,
     coordinatorQuery,
+    supabase.from("schemes").select("id, scheme_name").order("scheme_name"),
   ]);
 
-  const schemes = SHIFTS.map((shift) => ({ id: shift, scheme_name: shift }));
+  const schemes = (schemesData || []).map((item: any) => ({ id: item.id, scheme_name: item.scheme_name }));
 
   return { companies: companies || [], locations: locations || [], schemes, coordinators: coordinators || [] };
 }

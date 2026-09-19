@@ -62,7 +62,11 @@ export default function RTCADashboardPremium() {
     fetchRTCAOptions().then((value) => setOptions(value as Options)).catch(() => toast.error("Unable to load dashboard filters."));
   }, []);
   useEffect(() => {
-    const channel = supabase.channel("rtca-live-updates-premium").on("postgres_changes", { event: "*", schema: "public", table: "scheme_requirements" }, () => { void load(); }).subscribe();
+    const channel = supabase
+      .channel("rtca-live-updates-premium")
+      .on("postgres_changes", { event: "*", schema: "public", table: "scheme_requirements" }, () => { void load(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "headcount_updates" }, () => { void load(); })
+      .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [load]);
 
