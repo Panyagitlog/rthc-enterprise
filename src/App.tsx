@@ -16,6 +16,8 @@ import Headcount from "./pages/Headcount";
 import CompanyDashboard from "./pages/CompanyDashboard";
 import ApplicationSelection from "./pages/ApplicationSelection";
 import RTCADashboard from "./pages/RTCADashboardPremium";
+import RTCPMPage from "./features/rtcpm/RTCPMPage";
+import UserManagement from "./features/users/UserManagement";
 
 import ProtectedRoute from "./auth/ProtectedRoute";
 import RoleGuard from "./auth/RoleGuard";
@@ -75,6 +77,28 @@ export default function App() {
             <ProtectedRoute>
               <RoleGuard allowedRoles={["SUPER_ADMIN", "AREA_ADMIN"]}>
                 <RTCADashboard />
+              </RoleGuard>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/rtcpm"
+          element={
+            <ProtectedRoute>
+              <RoleGuard allowedRoles={["SUPER_ADMIN", "AUDITOR"]}>
+                <RTCPMPage />
+              </RoleGuard>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/users"
+          element={
+            <ProtectedRoute>
+              <RoleGuard allowedRoles={["SUPER_ADMIN"]}>
+                <UserManagement />
               </RoleGuard>
             </ProtectedRoute>
           }

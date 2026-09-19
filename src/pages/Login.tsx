@@ -1,6 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../services/supabase';
+import {
+  supabase,
+  isSupabaseConfigured,
+  getDemoUser,
+  setStoredSession,
+  clearStoredSession,
+  getStoredSession,
+  getProfileFromUsersTable,
+  normalizeRole,
+} from '../services/supabase';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import DMCFSLogo from '../components/brand/DMCFSLogo';
@@ -470,12 +479,12 @@ export default function Login() {
   // ============================================
 
   const redirectBasedOnRole = useCallback((role: string) => {
-    if (!role) {
+    const normalizedRole = normalizeRole(role);
+
+    if (!normalizedRole) {
       toast.error('No role assigned. Contact Administrator.');
       return;
     }
-
-    const normalizedRole = role.toUpperCase();
 
     switch (normalizedRole) {
       case 'SUPER_ADMIN':
@@ -486,6 +495,9 @@ export default function Login() {
         break;
       case 'COORDINATOR':
         navigate('/coordinator', { replace: true });
+        break;
+      case 'AUDITOR':
+        navigate('/rtcpm', { replace: true });
         break;
       default:
         toast.error(`Unknown role: ${role}. Please contact support.`);
@@ -498,6 +510,14 @@ export default function Login() {
   useEffect(() => {
     const checkSession = async () => {
       try {
+        if (!isSupabaseConfigured) {
+          const storedSession = getStoredSession();
+          if (storedSession?.role) {
+            redirectBasedOnRole(storedSession.role);
+          }
+          return;
+        }
+
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
           const { data: profile } = await supabase
@@ -533,6 +553,24 @@ export default function Login() {
     setLoading(true);
 
     try {
+      if (!isSupabaseConfigured) {
+        const demoUser = getDemoUser(email, password);
+
+        if (!demoUser) {
+          throw new Error('Demo login failed. Use admin@dmcfs.in, fieldofficer@dmcfs.in, area@dmcfs.in, or coordinator@dmcfs.in with password admin123.');
+        }
+
+        setStoredSession(demoUser);
+        toast.success(`Welcome back, ${demoUser.name}!`);
+        setAccessGranted(true);
+
+        setTimeout(() => {
+          redirectBasedOnRole(demoUser.role);
+        }, 400);
+
+        return;
+      }
+
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password,
@@ -552,13 +590,9 @@ export default function Login() {
         throw new Error('Authentication failed. Please try again.');
       }
 
-      const { data: profile, error: profileError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('auth_user_id', data.user.id)
-        .single();
+      const profile = await getProfileFromUsersTable(data.user.id);
 
-      if (profileError) {
+      if (!profile) {
         await supabase.auth.signOut();
         throw new Error('User profile not found. Contact Administrator.');
       }

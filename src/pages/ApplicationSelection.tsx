@@ -4,10 +4,18 @@ import {
   Building2,
   ChevronRight,
   LogOut,
+  Settings2,
   Users,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../services/supabase";
+import {
+  getProfileFromUsersTable,
+  getStoredSession,
+  normalizeRole,
+  supabase,
+  clearStoredSession,
+} from "../services/supabase";
 import DMCFSLogo from "../components/brand/DMCFSLogo";
 
 const appCards = [
@@ -37,15 +45,81 @@ const appCards = [
     tags: ["ANALYTICS", "CLIENTS", "PERFORMANCE"],
     cta: "Open RTCA",
   },
+  {
+    id: "rtcpm",
+    label: "RTCPM",
+    title: "COORDINATOR PERFORMANCE MANAGEMENT",
+    subtitle: "Assessment Analytics",
+    description:
+      "Review coordinator performance, assessment coverage, and auditor assessment management across locations.",
+    accent: "amber",
+    route: "/rtcpm",
+    icon: Building2,
+    tags: ["ASSESSMENTS", "COORDINATORS", "PERFORMANCE"],
+    cta: "Open RTCPM",
+  },
 ] as const;
 
 export default function ApplicationSelection() {
   const navigate = useNavigate();
+  const [currentUser, setCurrentUser] = useState({
+    name: "User",
+    role: "",
+  });
+
+  const isSuperAdmin = normalizeRole(currentUser.role) === "SUPER_ADMIN";
+
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      const storedUser = getStoredSession();
+
+      if (storedUser) {
+        setCurrentUser({
+          name: storedUser.name || storedUser.email || "User",
+          role: storedUser.role || "",
+        });
+        return;
+      }
+
+      const { data } = await supabase.auth.getSession();
+      const authUser = data.session?.user;
+
+      if (!authUser) return;
+
+      const profile = await getProfileFromUsersTable(authUser.id);
+      setCurrentUser({
+        name:
+          profile?.name ||
+          authUser.user_metadata?.name ||
+          authUser.user_metadata?.full_name ||
+          authUser.email ||
+          "User",
+        role: profile?.role || authUser.user_metadata?.role || "",
+      });
+    };
+
+    loadCurrentUser().catch((error) => {
+      console.error("Unable to load current user:", error);
+    });
+  }, []);
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    clearStoredSession();
     navigate("/", { replace: true });
   };
+
+  const roleLabel = normalizeRole(currentUser.role)
+    .split("_")
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(" ");
+  const initials = currentUser.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
 
   return (
     <main className="min-h-screen bg-[#F7F9FC] text-slate-900 transition-colors duration-300 dark:bg-[#07111F] dark:text-slate-50">
@@ -65,12 +139,12 @@ export default function ApplicationSelection() {
             <div className="flex items-center gap-3">
               <div className="hidden items-center gap-3 sm:flex">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FF6600] text-sm font-semibold text-white shadow-sm">
-                  PP
+                  {initials || "U"}
                 </div>
                 <div className="text-left">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Pranav P</p>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{currentUser.name}</p>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7A7A7A] dark:text-slate-300">
-                    Super Admin
+                    {roleLabel || "User"}
                   </p>
                 </div>
               </div>
@@ -95,7 +169,7 @@ export default function ApplicationSelection() {
                 <span className="inline-block h-px w-7 bg-[#FF6600]/50" />
               </div>
               <h1 className="text-3xl font-semibold tracking-[-0.04em] text-slate-900 dark:text-slate-50 sm:text-4xl lg:text-[3.25rem]">
-                Welcome back, Pranav
+                Welcome back, {currentUser.name}
               </h1>
               <p className="text-lg font-medium text-slate-700 dark:text-slate-200">
                 Choose your workspace to continue.
@@ -182,6 +256,58 @@ export default function ApplicationSelection() {
                   </div>
                 </button>
               ))}
+
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/users")}
+                  className="group relative overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 text-left shadow-[0_18px_50px_rgba(15,23,42,0.06)] transition-all duration-300 hover:-translate-y-1 hover:border-slate-300 hover:shadow-[0_26px_70px_rgba(15,23,42,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6600]/60 sm:p-7 dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-[0_18px_50px_rgba(2,6,23,0.38)] dark:hover:border-slate-700"
+                  aria-label="Open user management"
+                >
+                  <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-[#FF6600]/30 to-transparent opacity-80 dark:via-[#FF6600]/50" />
+
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FEE7D7] text-[#C2410C] dark:bg-[#4A2A1C] dark:text-[#FDBA74]">
+                      <Settings2 className="h-6 w-6" />
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      Administration
+                    </span>
+                  </div>
+
+                  <div className="mt-7">
+                    <h2 className="text-xl font-semibold tracking-[-0.03em] text-slate-900 dark:text-slate-50 sm:text-2xl">
+                      User Management
+                    </h2>
+                    <p className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-300">
+                      Manage platform users, access, and account status.
+                    </p>
+                  </div>
+
+                  <p className="mt-5 max-w-xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+                    Review all accounts, filter by role and status, and manage passwords and activation without exposing secure credentials.
+                  </p>
+
+                  <div className="mt-6 flex flex-wrap gap-2">
+                    <span className="inline-flex items-center rounded-full border border-[#fed7aa] bg-[#fff7ed] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#B45309] dark:border-[#4A2A1C] dark:bg-[#2A1A12] dark:text-[#FDBA74]">
+                      USERS
+                    </span>
+                    <span className="inline-flex items-center rounded-full border border-[#d9e7ff] bg-[#eff6ff] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#1D4ED8] dark:border-[#1F3F74] dark:bg-[#172554] dark:text-[#BFDBFE]">
+                      SECURE
+                    </span>
+                  </div>
+
+                  <div className="mt-7 flex items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-[#C2410C] dark:text-[#FDBA74]">
+                      Open User Management
+                      <ChevronRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                    </span>
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition-transform duration-200 group-hover:translate-x-1 group-hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:group-hover:bg-slate-700">
+                      <ArrowRight className="h-4 w-4" />
+                    </span>
+                  </div>
+                </button>
+              )}
             </div>
           </section>
 
