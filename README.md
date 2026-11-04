@@ -256,19 +256,56 @@ Use the root and backend `.env.example` files as templates.
 
 ```text
 .
-├── public/                 Static assets and DMCFS branding
+├── .env.example                    Web environment-variable template
+├── package.json                    Web scripts and dependencies
+├── tsconfig*.json                  TypeScript configuration
+├── vite.config.ts                  Vite development and build configuration
+├── public/                         Static assets, logos, and brand imagery
 ├── src/
-│   ├── auth/                Authentication providers and route guards
-│   ├── components/          Shared UI, dashboards, charts, and branding
-│   ├── features/            RTCPM and user-management features
-│   ├── hooks/               Shared React hooks
-│   ├── pages/               Application screens, including RTHC, RTCA, and AI chat
-│   ├── services/            Supabase and data-service integrations
-│   └── App.tsx              Application routes and protected screens
+│   ├── apps/
+│   │   └── rtsrmp/                 RTSRMP application, access control, and data services
+│   ├── assets/                       Imported images, fonts, and other UI assets
+│   ├── auth/                         Authentication context and access helpers
+│   ├── components/
+│   │   ├── brand/                  Shared DMCFS branding
+│   │   ├── dashboard/              Dashboard widgets and visualizations
+│   │   ├── rtca/                   RTCA-specific components
+│   │   └── ui/                     Reusable interface primitives
+│   ├── features/
+│   │   ├── rtcpm/                  RTCPM workflows and components
+│   │   └── users/                  User-management features
+│   ├── hooks/                      Shared React hooks
+│   ├── layouts/                    Shared page and application layouts
+│   ├── lib/                        Shared utilities and platform integrations
+│   ├── pages/                      Route-level screens for RTHC, RTCA, and AI chat
+│   ├── routes/                     Route-related components and showcases
+│   ├── services/                   Frontend API and data-service integrations
+│   ├── store/                      Shared client-side state
+│   ├── types/                      Shared TypeScript types
+│   ├── App.tsx                     Application routes and protected screens
+│   ├── index.css                   Global styles
+│   └── main.tsx                    React application entry point
+├── supabase/
+│   └── migrations/                 Supabase schema and access-policy migrations
 └── server/
-    ├── prisma/              Prisma schema and database migrations
-    └── ...                  Express API, configuration, and route modules
+    ├── config/                     Backend configuration
+    ├── controllers/                HTTP request handlers
+    ├── middleware/                 Express middleware and request guards
+    ├── prisma/                     Prisma schema, client, and migrations
+    ├── repositories/               Database access and persistence
+    ├── routes/                     Express route definitions
+    ├── services/                   Backend business logic and integrations
+    ├── types/                      Backend TypeScript types
+    ├── utils/                      Backend utility functions
+    ├── validators/                 Request and data validation
+    ├── websocket/                  WebSocket functionality
+    └── server.ts                   Backend entry point
 ```
+
+The web client is organized by responsibility: route-level screens live in `src/pages/`,
+shared UI in `src/components/`, and larger domain workflows in `src/features/` or
+`src/apps/`. Supabase migrations are kept separately from the optional Express/Prisma
+backend so each data layer can be managed independently.
 
 ## Security
 
