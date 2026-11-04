@@ -1,15 +1,15 @@
-import { Request, Response } from "express";
+﻿import { Request, Response } from "express";
 import { AiProvider, ChatMessage, createAiChat } from "../services/ai-provider.service";
 import { buildApplicationContext, resolveIntent } from "../services/application-context.service";
 import { AuthRequest } from "../middleware/auth.middleware";
 
-const contexts = new Set(["DMCFS", "RTHC", "RTCA", "RTCPM"]);
+const contexts = new Set(["DMCFS", "RTHC", "RTCA", "RTCPM", "RTSRMP"]);
 
 export async function chat(req: Request, res: Response) {
   const { context, provider, messages } = req.body as { context?: string; provider?: AiProvider; messages?: ChatMessage[] };
   const selectedProvider = provider ?? "openai";
 
-  if (!context || !contexts.has(context) || !["openai", "claude"].includes(selectedProvider) || !Array.isArray(messages) || messages.length === 0) {
+  if (!context || !contexts.has(context) || !["openai", "claude", "gemini", "sarvam"].includes(selectedProvider) || !Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ message: "A valid provider, context, and at least one message are required." });
   }
 
@@ -24,9 +24,14 @@ export async function chat(req: Request, res: Response) {
 
   try {
     const accessToken = (req as AuthRequest).supabaseAccessToken;
-    const dataContext = accessToken
-      ? await buildApplicationContext(context as "DMCFS" | "RTHC" | "RTCA" | "RTCPM", latestMessageContent, accessToken)
-      : "Live Supabase data is unavailable for this session.";
+    if (!accessToken) {
+      return res.status(503).json({ message: "Live business data is unavailable for this session. Please verify the server database configuration." });
+    }
+    const dataContext = await buildApplicationContext(
+      context as "DMCFS" | "RTHC" | "RTCA" | "RTCPM" | "RTSRMP",
+      latestMessageContent,
+      accessToken,
+    );
     const answer = await createAiChat(selectedProvider, [
       {
         role: "system",
@@ -36,15 +41,17 @@ export async function chat(req: Request, res: Response) {
     ]);
 
     const intent = resolveIntent(latestMessageContent);
-    const source = intent === "GET_COORDINATOR"
-      ? "RTHC master data"
-      : intent === "GET_ASSESSMENT" || intent === "GET_COORDINATOR_PERFORMANCE"
-        ? "RTCPM assessment data"
-        : context === "RTCA"
-          ? "RTCA analytics"
-          : context === "RTHC"
-            ? "RTHC live data"
-            : "DMCFS application data";
+    const source = context === "RTSRMP"
+      ? "RTSRMP stipend and verification data"
+      : intent === "GET_COORDINATOR"
+        ? "RTHC master data"
+        : intent === "GET_ASSESSMENT" || intent === "GET_COORDINATOR_PERFORMANCE"
+          ? "RTCPM assessment data"
+          : context === "RTCA"
+            ? "RTCA analytics"
+            : context === "RTHC"
+              ? "RTHC live data"
+              : "DMCFS platform data";
     return res.json({ answer, source });
   } catch (error) {
     const message = error instanceof Error ? error.message : "AI service is temporarily unavailable. Please try again.";

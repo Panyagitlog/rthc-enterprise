@@ -1,4 +1,4 @@
-type Context = "DMCFS" | "RTHC" | "RTCA" | "RTCPM";
+type Context = "DMCFS" | "RTHC" | "RTCA" | "RTCPM" | "RTSRMP";
 export type Intent = "GET_COORDINATOR" | "GET_HEADCOUNT" | "GET_REQUIREMENT" | "GET_FILLED" | "GET_VACANCY" | "GET_ASSESSMENT" | "GET_COORDINATOR_PERFORMANCE" | "GENERAL_DMCFS";
 
 export function resolveIntent(question: string): Intent {
@@ -22,9 +22,13 @@ function serverConfig() {
 
 async function fetchTable(table: string, select: string, accessToken: string, query = "") {
   const { url, anonKey, serviceRoleKey } = serverConfig();
-  if (!url || (!anonKey && !serviceRoleKey) || url.includes("placeholder")) return [];
+  if (!url || (!anonKey && !serviceRoleKey) || url.includes("placeholder")) {
+    throw new Error("Live business data is not configured on the server.");
+  }
   const apiKey = serviceRoleKey || anonKey;
-  if (!apiKey) return [];
+  if (!apiKey || !accessToken) {
+    throw new Error("Live business data could not be accessed for this session.");
+  }
 
   const response = await fetch(`${url}/rest/v1/${table}?select=${encodeURIComponent(select)}${query}`, {
     headers: {
@@ -33,17 +37,36 @@ async function fetchTable(table: string, select: string, accessToken: string, qu
     },
   });
 
-  if (!response.ok) return [];
+  if (!response.ok) {
+    throw new Error(`Live business data could not be loaded (HTTP ${response.status}). Verify the database connection and access policies.`);
+  }
   return await response.json() as Record<string, unknown>[];
 }
 
 function matchingRows(rows: Record<string, unknown>[], question: string, limit = 20) {
-  const terms = question.toLowerCase().split(/\s+/).filter((term) => term.length > 2);
-  const matches = rows.filter((row) => {
-    const text = JSON.stringify(row).toLowerCase();
-    return terms.length === 0 || terms.some((term) => text.includes(term));
-  });
-  return (matches.length ? matches : rows).slice(0, limit);
+  const stopWords = new Set([
+    "about", "active", "after", "all", "also", "and", "are", "assessment", "assessments",
+    "business", "can", "company", "companies", "coordinator", "coordinators", "could",
+    "current", "data", "did", "does", "for", "from", "give", "growth", "have", "headcount",
+    "help", "history", "how", "into", "latest", "list", "me", "month", "more", "new",
+    "overview", "performance", "please", "rate", "rates", "record", "records", "requirement",
+    "requirements", "rtsrmp", "scheme", "schemes", "show", "stipend", "summary", "that",
+    "the", "their", "these", "this", "today", "total", "trend", "what", "when", "where",
+    "which", "who", "with", "workforce", "would", "year",
+  ]);
+  const terms = question.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/)
+    .filter((term) => term.length > 2 && !stopWords.has(term));
+  if (!terms.length) return rows.slice(0, limit);
+
+  return rows
+    .map((row) => {
+      const text = JSON.stringify(row).toLowerCase();
+      return { row, score: terms.reduce((total, term) => total + (text.includes(term) ? 1 : 0), 0) };
+    })
+    .filter(({ score }) => score > 0)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, limit)
+    .map(({ row }) => row);
 }
 
 const hiddenFields = new Set([
@@ -51,10 +74,18 @@ const hiddenFields = new Set([
   "auth_user_id",
   "user_id",
   "assessment_id",
+  "submission_id",
   "company_id",
   "location_id",
   "coordinator_id",
   "auditor_id",
+  "profile_id",
+  "created_by",
+  "updated_by",
+  "approved_by",
+  "uploaded_by",
+  "verifier_id",
+  "storage_path",
   "password",
   "email",
   "mobile",
@@ -136,7 +167,65 @@ async function buildCoordinatorContext(question: string, accessToken: string) {
   });
 }
 
+async function buildRTSRMPSections(question: string, accessToken: string) {
+  const [companies, locations, rates, overtime, benefits, deductions, eligibility, requirements, documents, verificationLogs, history] =
+    await Promise.all([
+      fetchTable("rtsrmp_companies", "company_id,company_name,company_code,status", accessToken, "&limit=1000"),
+      fetchTable("rtsrmp_locations", "location_id,company_id,location_name,city,state,status", accessToken, "&limit=1000"),
+      fetchTable("rtsrmp_stipend_rates", "*", accessToken, "&order=created_at.desc&limit=1000"),
+      fetchTable("rtsrmp_overtime", "submission_id,applicable,ot_rate,calculation_basis,rate_unit,maximum_hours,remarks,effective_from,effective_to", accessToken, "&limit=1000"),
+      fetchTable("rtsrmp_benefits", "submission_id,benefit_type,applicable,value,amount,frequency,remarks,effective_from,effective_to", accessToken, "&limit=1000"),
+      fetchTable("rtsrmp_deductions", "submission_id,deduction_type,applicable,amount,percentage,frequency,reason,remarks", accessToken, "&limit=1000"),
+      fetchTable("rtsrmp_eligibility", "submission_id,min_age,max_age,education,qualification,trade,experience,gender,other_criteria,remarks", accessToken, "&limit=1000"),
+      fetchTable("rtsrmp_requirements", "submission_id,scheme,qualification,trade,requirement_count,current_students,preferred_joining_timeline,remarks", accessToken, "&limit=1000"),
+      fetchTable("rtsrmp_documents", "submission_id,document_type,file_name,content_type,file_size,created_at", accessToken, "&limit=1000"),
+      fetchTable("rtsrmp_verification_logs", "submission_id,action,remarks,created_at", accessToken, "&order=created_at.desc&limit=1000"),
+      fetchTable("rtsrmp_rate_history", "submission_id,company_id,location_id,scheme,qualification,trade,stipend_rate,currency,effective_from,effective_to,status,approved_at,change_reason", accessToken, "&order=approved_at.desc&limit=1000"),
+    ]);
+
+  const companyNames = new Map(companies.map((company) => [String(company.company_id), String(company.company_name ?? "")]));
+  const locationNames = new Map(locations.map((location) => [String(location.location_id), String(location.location_name ?? "")]));
+  const enrichedRates = rates.map((rate) => ({
+    ...rate,
+    company_name: companyNames.get(String(rate.company_id)) ?? "",
+    location_name: locationNames.get(String(rate.location_id)) ?? "",
+  }));
+  const relevantRates = matchingRows(enrichedRates, question, 30);
+  const submissionIds = new Set(relevantRates.map((rate) => String(rate.id)));
+  const related = (rows: Record<string, unknown>[]) => rows.filter((row) => submissionIds.has(String(row.submission_id)));
+  const companyIds = new Set(relevantRates.map((rate) => String(rate.company_id)));
+  const locationIds = new Set(relevantRates.map((rate) => String(rate.location_id)));
+  const enrichedHistory: Record<string, unknown>[] = history.map((record) => ({
+    ...record,
+    company_name: companyNames.get(String(record.company_id)) ?? "",
+    location_name: locationNames.get(String(record.location_id)) ?? "",
+  }));
+  const relevantHistory = relevantRates.length
+    ? enrichedHistory.filter((record) =>
+      submissionIds.has(String(record.submission_id)) || companyIds.has(String(record.company_id)),
+    ).slice(0, 30)
+    : matchingRows(enrichedHistory, question, 30);
+
+  return {
+    "RTSRMP stipend submissions": relevantRates,
+    "RTSRMP companies": companies.filter((company) => companyIds.has(String(company.company_id))),
+    "RTSRMP locations": locations.filter((location) => locationIds.has(String(location.location_id))),
+    "RTSRMP overtime": related(overtime),
+    "RTSRMP benefits": related(benefits),
+    "RTSRMP deductions": related(deductions),
+    "RTSRMP eligibility": related(eligibility),
+    "RTSRMP requirements": related(requirements),
+    "RTSRMP supporting document metadata": related(documents),
+    "RTSRMP verification history": related(verificationLogs),
+    "RTSRMP approved rate history": relevantHistory,
+  };
+}
+
 export async function buildApplicationContext(context: Context, question: string, accessToken: string) {
+  if (context === "RTSRMP") {
+    return businessContext(await buildRTSRMPSections(question, accessToken));
+  }
+
   if (resolveIntent(question) === "GET_COORDINATOR") {
     return buildCoordinatorContext(question, accessToken);
   }
@@ -151,7 +240,7 @@ export async function buildApplicationContext(context: Context, question: string
     const relevantUsers = matchingRows(users, question, 10);
     const userIds = new Set(relevantUsers.map((user) => String(user.id || "")));
     const relevantAssessments = assessments.filter((assessment) => {
-      if (!userIds.size) return true;
+      if (!userIds.size) return false;
       const text = JSON.stringify(assessment).toLowerCase();
       return [...userIds].some((id) => id && text.includes(id.toLowerCase())) || text.includes(question.toLowerCase());
     }).slice(0, 10);
@@ -232,7 +321,7 @@ export async function buildApplicationContext(context: Context, question: string
   const relevantScores = scores.filter((score) => !assessmentIds.size || assessmentIds.has(String(score.assessment_id || ""))).slice(0, 50);
   const assessmentFilter = [...assessmentIds].filter(Boolean).join(",");
   const detailQuery = assessmentFilter ? `&assessment_id=in.(${encodeURIComponent(assessmentFilter)})` : "&limit=0";
-  const [headcountDetails, joiningDetails, registrationDetails, attendanceDetails, disciplineDetails, trainingDetails, feedbackDetails] = await Promise.all([
+  const [headcountDetails, joiningDetails, registrationDetails, attendanceDetails, disciplineDetails, trainingDetails, feedbackDetails, rtsrmpSections] = await Promise.all([
     fetchTable("rtcpm_headcount", "*", accessToken, detailQuery),
     fetchTable("rtcpm_joining", "*", accessToken, detailQuery),
     fetchTable("rtcpm_registration", "*", accessToken, detailQuery),
@@ -240,6 +329,7 @@ export async function buildApplicationContext(context: Context, question: string
     fetchTable("rtcpm_discipline", "*", accessToken, detailQuery),
     fetchTable("rtcpm_training", "*", accessToken, detailQuery),
     fetchTable("rtcpm_feedback", "*", accessToken, detailQuery),
+    buildRTSRMPSections(question, accessToken),
   ]);
 
   return businessContext({
@@ -257,5 +347,6 @@ export async function buildApplicationContext(context: Context, question: string
     "RTCPM discipline details": disciplineDetails,
     "RTCPM training details": trainingDetails,
     "RTCPM feedback details": feedbackDetails,
+    ...rtsrmpSections,
   });
 }

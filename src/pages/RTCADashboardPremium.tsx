@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, ArrowLeft, BarChart3, Building2, CheckCircle2, Download, FileSpreadsheet, Filter, LogOut, MapPin, RefreshCw, Search, ShieldCheck, Users, X } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import * as XLSX from "xlsx";
@@ -14,20 +14,21 @@ import RTCABusinessGrowthChart from "../components/rtca/RTCABusinessGrowthChart"
 type Option = { id: string; company_name?: string; location_name?: string; scheme_name?: string; name?: string; company_id?: string; location_id?: string };
 type Options = { companies: Option[]; locations: Option[]; schemes: Option[]; coordinators: Option[] };
 type Summary = { label: string; requirement: number; filled: number; vacant: number; fillRate: number };
-type DatePreset = "today" | "yesterday" | "7" | "30" | "custom";
+type DatePreset = "all" | "today" | "yesterday" | "7" | "30" | "custom";
 
 const emptyStats: RTCAStats = { companies: 0, locations: 0, requirement: 0, filled: 0, vacant: 0, fillRate: 0 };
 const colors = { cyan: "#0891b2", green: "#059669", amber: "#d97706", navy: "#0f172a" };
-const isoDate = (date: Date) => date.toISOString().slice(0, 10);
+const isoDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const noDateFilters = { dateFrom: "", dateTo: "" };
 const formatNumber = (value: number) => value.toLocaleString("en-IN");
 const rate = (filled: number, requirement: number) => requirement > 0 ? (filled / requirement) * 100 : 0;
 
 export default function RTCADashboardPremium() {
   const navigate = useNavigate();
   const today = isoDate(new Date());
-  const [appliedFilters, setAppliedFilters] = useState<RTCAFilters>({ companyId: "", locationId: "", schemeId: "", coordinatorId: "", dateFrom: today, dateTo: today });
+  const [appliedFilters, setAppliedFilters] = useState<RTCAFilters>({ companyId: "", locationId: "", schemeId: "", coordinatorId: "", ...noDateFilters });
   const [draftFilters, setDraftFilters] = useState<RTCAFilters>(appliedFilters);
-  const [preset, setPreset] = useState<DatePreset>("today");
+  const [preset, setPreset] = useState<DatePreset>("all");
   const [rows, setRows] = useState<RTCARow[]>([]);
   const [stats, setStats] = useState<RTCAStats>(emptyStats);
   const [options, setOptions] = useState<Options>({ companies: [], locations: [], schemes: [], coordinators: [] });
@@ -41,26 +42,32 @@ export default function RTCADashboardPremium() {
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const pageSize = 10;
 
+  const requestId = useRef(0);
   const load = useCallback(async () => {
+    const current = ++requestId.current;
     setLoading(true);
     setError(false);
     try {
       const result = await fetchRTCAData(appliedFilters);
+      if (current !== requestId.current) return;
       setRows(result.rows);
       setStats(result.stats);
       setLastUpdated(new Date());
     } catch (loadError) {
+      if (current !== requestId.current) return;
       console.error(loadError);
+      setRows([]);
+      setStats(emptyStats);
       setError(true);
       toast.error("Unable to load workforce analytics.");
     } finally {
-      setLoading(false);
+      if (current === requestId.current) setLoading(false);
     }
   }, [appliedFilters]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    fetchRTCAOptions().then((value) => setOptions(value as Options)).catch(() => toast.error("Unable to load dashboard filters."));
+    fetchRTCAOptions().then((value) => setOptions(value as Options)).catch((optionsError) => { console.error(optionsError); toast.error("Unable to load dashboard filters."); });
   }, []);
   useEffect(() => {
     const channel = supabase
@@ -125,10 +132,11 @@ export default function RTCADashboardPremium() {
   const pendingCount = coordinatorStatus.filter((item) => !item.updated).length;
 
   const applyFilters = () => { setPage(1); setAppliedFilters(draftFilters); };
-  const resetFilters = () => { const reset = { companyId: "", locationId: "", schemeId: "", coordinatorId: "", dateFrom: today, dateTo: today }; setPreset("today"); setDraftFilters(reset); setAppliedFilters(reset); setPage(1); };
+  const resetFilters = () => { const reset = { companyId: "", locationId: "", schemeId: "", coordinatorId: "", ...noDateFilters }; setPreset("all"); setDraftFilters(reset); setAppliedFilters(reset); setPage(1); };
   const selectPreset = (value: DatePreset) => {
     setPreset(value);
     if (value === "custom") return;
+    if (value === "all") { setDraftFilters((current) => ({ ...current, ...noDateFilters })); return; }
     const end = new Date();
     const start = new Date();
     if (value === "yesterday") { start.setDate(start.getDate() - 1); end.setDate(end.getDate() - 1); }
@@ -156,7 +164,7 @@ export default function RTCADashboardPremium() {
       </header>
 
       <section id="overview" className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">{loading ? <KpiSkeletons /> : rows.length ? <KpiCards stats={stats} /> : null}</section>
-      <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><Filter className="h-4 w-4 text-cyan-700" /><h2 className="text-sm font-semibold">Dashboard filters</h2><span className="text-xs text-slate-400">Reporting date</span></div><div className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">{(["today", "yesterday", "7", "30", "custom"] as DatePreset[]).map((item) => <button key={item} onClick={() => selectPreset(item)} className={`rounded-md px-2.5 py-1.5 text-xs font-medium ${preset === item ? "bg-white text-cyan-700 shadow-sm dark:bg-slate-700 dark:text-cyan-300" : "text-slate-500"}`}>{item === "7" ? "7 Days" : item === "30" ? "30 Days" : item[0].toUpperCase() + item.slice(1)}</button>)}</div></div><div className="grid gap-3 md:grid-cols-2 lg:grid-cols-6"><FilterSelect label="Company" value={draftFilters.companyId} onChange={(value) => updateDraft("companyId", value)} options={options.companies.map((item) => [item.id, item.company_name || ""])} /><FilterSelect label="Location" value={draftFilters.locationId} onChange={(value) => updateDraft("locationId", value)} options={options.locations.filter((item) => !draftFilters.companyId || item.company_id === draftFilters.companyId).map((item) => [item.id, item.location_name || ""])} /><FilterSelect label="Scheme" value={draftFilters.schemeId} onChange={(value) => updateDraft("schemeId", value)} options={options.schemes.map((item) => [item.id, item.scheme_name || ""])} /><FilterSelect label="Coordinator" value={draftFilters.coordinatorId} onChange={(value) => updateDraft("coordinatorId", value)} options={options.coordinators.map((item) => [item.id, item.name || ""])} /><DateField label="From" value={draftFilters.dateFrom} onChange={(value) => { setPreset("custom"); updateDraft("dateFrom", value); }} /><DateField label="To" value={draftFilters.dateTo} onChange={(value) => { setPreset("custom"); updateDraft("dateTo", value); }} /></div><div className="mt-3 flex justify-end gap-2"><button onClick={resetFilters} className="rounded-lg px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">Reset filters</button><button onClick={applyFilters} className="rounded-lg bg-[#0e7490] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#155e75]">Apply filters</button></div></section>
+      <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><Filter className="h-4 w-4 text-cyan-700" /><h2 className="text-sm font-semibold">Dashboard filters</h2><span className="text-xs text-slate-400">Reporting date</span></div><div className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">{(["all", "today", "yesterday", "7", "30", "custom"] as DatePreset[]).map((item) => <button key={item} onClick={() => selectPreset(item)} className={`rounded-md px-2.5 py-1.5 text-xs font-medium ${preset === item ? "bg-white text-cyan-700 shadow-sm dark:bg-slate-700 dark:text-cyan-300" : "text-slate-500"}`}>{item === "7" ? "7 Days" : item === "30" ? "30 Days" : item === "all" ? "All Time" : item[0].toUpperCase() + item.slice(1)}</button>)}</div></div><div className="grid gap-3 md:grid-cols-2 lg:grid-cols-6"><FilterSelect label="Company" value={draftFilters.companyId} onChange={(value) => updateDraft("companyId", value)} options={options.companies.map((item) => [item.id, item.company_name || ""])} /><FilterSelect label="Location" value={draftFilters.locationId} onChange={(value) => updateDraft("locationId", value)} options={options.locations.filter((item) => !draftFilters.companyId || item.company_id === draftFilters.companyId).map((item) => [item.id, item.location_name || ""])} /><FilterSelect label="Scheme" value={draftFilters.schemeId} onChange={(value) => updateDraft("schemeId", value)} options={options.schemes.map((item) => [item.id, item.scheme_name || ""])} /><FilterSelect label="Coordinator" value={draftFilters.coordinatorId} onChange={(value) => updateDraft("coordinatorId", value)} options={options.coordinators.map((item) => [item.id, item.name || ""])} /><DateField label="From" value={draftFilters.dateFrom} onChange={(value) => { setPreset("custom"); updateDraft("dateFrom", value); }} /><DateField label="To" value={draftFilters.dateTo} onChange={(value) => { setPreset("custom"); updateDraft("dateTo", value); }} /></div><div className="mt-3 flex justify-end gap-2"><button onClick={resetFilters} className="rounded-lg px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">Reset filters</button><button onClick={applyFilters} className="rounded-lg bg-[#0e7490] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#155e75]">Apply filters</button></div></section>
 
       {error && <div className="mt-5 flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"><span>We could not load workforce data right now.</span><button onClick={() => void load()} className="font-semibold underline">Try again</button></div>}
       {!loading && !error && rows.length === 0 && <EmptyPanel onClear={resetFilters} />}
@@ -178,7 +186,7 @@ export default function RTCADashboardPremium() {
 }
 
 function summarize(rows: RTCARow[], key: (row: RTCARow) => string): Summary[] { const result: Record<string, Summary> = {}; rows.forEach((row) => { const label = key(row); const item = result[label] || emptySummary(label); item.requirement += Number(row.requirement || 0); item.filled += Number(row.filled || 0); item.vacant += Number(row.vacant || 0); item.fillRate = rate(item.filled, item.requirement); result[label] = item; }); return Object.values(result).sort((a, b) => b.requirement - a.requirement); }
-function summarizeByDate(rows: RTCARow[], days: number) { const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days + 1); const grouped = summarize(rows.filter((row) => new Date(`${row.report_date}T00:00:00`) >= cutoff), (row) => row.report_date); return grouped.sort((a, b) => a.label.localeCompare(b.label)).map((item) => ({ date: item.label, requirement: item.requirement, filled: item.filled, vacant: item.vacant })); }
+function summarizeByDate(rows: RTCARow[], days: number) { const cutoff = new Date(); cutoff.setHours(0, 0, 0, 0); cutoff.setDate(cutoff.getDate() - days + 1); const grouped = summarize(rows.filter((row) => new Date(`${row.report_date}T00:00:00`) >= cutoff), (row) => row.report_date); return grouped.sort((a, b) => a.label.localeCompare(b.label)).map((item) => ({ date: item.label, requirement: item.requirement, filled: item.filled, vacant: item.vacant })); }
 function emptySummary(label: string): Summary { return { label, requirement: 0, filled: 0, vacant: 0, fillRate: 0 }; }
 function downloadBlob(blob: Blob, filename: string) { const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url); }
 function Panel({ title, subtitle, action, children }: { title: string; subtitle: string; action?: React.ReactNode; children: React.ReactNode }) { return <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="font-semibold tracking-tight">{title}</h2><p className="mt-1 text-xs text-slate-400">{subtitle}</p></div>{action}</div>{children}</div>; }

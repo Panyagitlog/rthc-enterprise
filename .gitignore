@@ -30,3 +30,6 @@ server/.env.*
 *.njsproj
 *.sln
 *.sw?
+
+# Data backups
+backups/

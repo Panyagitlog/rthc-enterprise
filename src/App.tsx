@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Moon, Sun } from "lucide-react";
 
 import Login from "./pages/Login";
@@ -16,9 +16,12 @@ import Headcount from "./pages/Headcount";
 import CompanyDashboard from "./pages/CompanyDashboard";
 import ApplicationSelection from "./pages/ApplicationSelection";
 import RTCADashboard from "./pages/RTCADashboardPremium";
+import TVMode from "./pages/TVMode";
 import RTCPMPage from "./features/rtcpm/RTCPMPage";
 import UserManagement from "./features/users/UserManagement";
 import AIChat from "./pages/AIChat";
+import RTSRMPApp from "./apps/rtsrmp/RTSRMPApp";
+import RTSRMPAccess from "./apps/rtsrmp/RTSRMPAccess";
 
 import ProtectedRoute from "./auth/ProtectedRoute";
 import RoleGuard from "./auth/RoleGuard";
@@ -33,12 +36,17 @@ import { useTheme } from "./lib/theme/ThemeProvider";
 
 function GlobalThemeToggle() {
   const { isDark, toggleTheme } = useTheme();
+  const pathname = useLocation().pathname;
+  const isLoginPage = pathname === "/";
+
+  if (pathname === "/tvmode") return null;
 
   return (
     <button
       type="button"
       onClick={toggleTheme}
       className="fixed right-4 top-4 z-[100] inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-lg backdrop-blur transition hover:scale-105 hover:bg-white dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800"
+      style={isLoginPage && isDark ? { borderColor: "var(--brand-pink)", boxShadow: "0 0 0 1px var(--brand-pink)" } : undefined}
       title={isDark ? "Switch to light mode" : "Switch to dark mode"}
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
     >
@@ -84,6 +92,17 @@ export default function App() {
         />
 
         <Route
+          path="/tvmode"
+          element={
+            <ProtectedRoute>
+              <RoleGuard allowedRoles={["SUPER_ADMIN"]}>
+                <TVMode />
+              </RoleGuard>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/rtcpm"
           element={
             <ProtectedRoute>
@@ -112,6 +131,17 @@ export default function App() {
               <RoleGuard allowedRoles={["SUPER_ADMIN"]}>
                 <AIChat />
               </RoleGuard>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/rtsrmp/*"
+          element={
+            <ProtectedRoute>
+              <RTSRMPAccess>
+                <RTSRMPApp />
+              </RTSRMPAccess>
             </ProtectedRoute>
           }
         />

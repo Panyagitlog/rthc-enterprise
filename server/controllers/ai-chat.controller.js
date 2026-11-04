@@ -7,7 +7,7 @@ const contexts = new Set(["DMCFS", "RTHC", "RTCA", "RTCPM"]);
 async function chat(req, res) {
     const { context, provider, messages } = req.body;
     const selectedProvider = provider ?? "openai";
-    if (!context || !contexts.has(context) || !["openai", "claude"].includes(selectedProvider) || !Array.isArray(messages) || messages.length === 0) {
+    if (!context || !contexts.has(context) || !["openai", "claude", "gemini", "sarvam"].includes(selectedProvider) || !Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ message: "A valid provider, context, and at least one message are required." });
     }
     const safeMessages = messages

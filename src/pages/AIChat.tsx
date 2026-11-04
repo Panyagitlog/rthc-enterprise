@@ -1,4 +1,4 @@
-import {
+﻿import {
   ArrowLeft,
   ArrowUp,
   BarChart3,
@@ -22,13 +22,15 @@ import { useNavigate } from "react-router-dom";
 import DMCFSLogo from "../components/brand/DMCFSLogo";
 import { supabase } from "../services/supabase";
 
-type Context = "DMCFS" | "RTHC" | "RTCA" | "RTCPM";
-type Provider = "openai" | "claude";
+type Context = "DMCFS" | "RTHC" | "RTCA" | "RTCPM" | "RTSRMP";
+type Provider = "openai" | "claude" | "gemini" | "sarvam";
 type Message = { id: number; role: "assistant" | "user"; content: string; source?: string };
 
 const providers: { value: Provider; label: string }[] = [
   { value: "openai", label: "OpenAI · GPT-4.1 mini" },
   { value: "claude", label: "Claude · Sonnet 4.5" },
+  { value: "gemini", label: "Google · Gemini" },
+  { value: "sarvam", label: "Sarvam · sarvam-105b" },
 ];
 
 const contexts: { label: Context; description: string; icon: typeof BrainCircuit }[] = [
@@ -36,6 +38,7 @@ const contexts: { label: Context; description: string; icon: typeof BrainCircuit
   { label: "RTHC", description: "Headcount operations", icon: Users },
   { label: "RTCA", description: "Business analytics", icon: BarChart3 },
   { label: "RTCPM", description: "Coordinator performance", icon: TrendingUp },
+  { label: "RTSRMP", description: "Stipend rates and verification", icon: FileText },
 ];
 
 const quickPrompts = [
@@ -150,7 +153,7 @@ export default function AIChat() {
               </div>
             </div>
 
-            <div className="pb-6 sm:pb-8"><form onSubmit={sendMessage} className="mx-auto max-w-3xl rounded-2xl border border-slate-300 bg-white p-2 shadow-[0_12px_35px_rgba(15,23,42,0.08)] focus-within:border-[#ff6600] focus-within:ring-4 focus-within:ring-[#ff6600]/10 dark:border-slate-700 dark:bg-slate-900"><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendMessage(); } }} rows={2} placeholder={`Ask about ${activeContext}...`} className="w-full resize-none bg-transparent px-3 py-2 text-sm leading-6 outline-none placeholder:text-slate-400" /><div className="flex items-center justify-between px-2 pb-1"><div className="flex items-center gap-1"><button type="button" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800" aria-label="Attach a file"><Paperclip className="h-4 w-4" /></button><button type="button" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800" aria-label="Use voice input"><Mic className="h-4 w-4" /></button><span className="ml-2 hidden text-[11px] text-slate-400 sm:block">{isSending ? `${activeProvider === "openai" ? "OpenAI" : "Claude"} is thinking...` : "DMCFS AI uses authorized enterprise data"}</span></div><button type="submit" disabled={!input.trim() || isSending} className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#ff6600] text-white transition hover:bg-[#e85b00] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Send message"><ArrowUp className="h-4 w-4" /></button></div></form><p className="mt-3 text-center text-[11px] text-slate-400">AI responses can be reviewed against their displayed source context.</p></div>
+            <div className="pb-6 sm:pb-8"><form onSubmit={sendMessage} className="mx-auto max-w-3xl rounded-2xl border border-slate-300 bg-white p-2 shadow-[0_12px_35px_rgba(15,23,42,0.08)] focus-within:border-[#ff6600] focus-within:ring-4 focus-within:ring-[#ff6600]/10 dark:border-slate-700 dark:bg-slate-900"><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendMessage(); } }} rows={2} placeholder={`Ask about ${activeContext}...`} className="w-full resize-none bg-transparent px-3 py-2 text-sm leading-6 outline-none placeholder:text-slate-400" /><div className="flex items-center justify-between px-2 pb-1"><div className="flex items-center gap-1"><button type="button" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800" aria-label="Attach a file"><Paperclip className="h-4 w-4" /></button><button type="button" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800" aria-label="Use voice input"><Mic className="h-4 w-4" /></button><span className="ml-2 hidden text-[11px] text-slate-400 sm:block">{isSending ? `${activeProvider === "openai" ? "OpenAI" : activeProvider === "gemini" ? "Gemini" : activeProvider === "sarvam" ? "Sarvam" : "Claude"} is thinking...` : "DMCFS AI uses authorized enterprise data"}</span></div><button type="submit" disabled={!input.trim() || isSending} className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#ff6600] text-white transition hover:bg-[#e85b00] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Send message"><ArrowUp className="h-4 w-4" /></button></div></form><p className="mt-3 text-center text-[11px] text-slate-400">AI responses can be reviewed against their displayed source context.</p></div>
           </div>
         </section>
       </div>

@@ -4,8 +4,10 @@ import {
   Bot,
   Building2,
   ChevronRight,
+  CircleDollarSign,
   LogOut,
   Settings2,
+  Tv,
   Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -47,6 +49,19 @@ const appCards = [
     cta: "Open RTCA",
   },
   {
+    id: "tvmode",
+    label: "TV MODE",
+    title: "NATIONWIDE LIVE UPDATES",
+    subtitle: "All India Display",
+    description:
+      "Show live workforce and scheme updates from every company, location and state on a TV screen.",
+    accent: "cyan",
+    route: "/tvmode",
+    icon: Tv,
+    tags: ["ALL INDIA", "LIVE UPDATES", "TV DISPLAY"],
+    cta: "Open TV Mode",
+  },
+  {
     id: "rtcpm",
     label: "RTCPM",
     title: "COORDINATOR PERFORMANCE MANAGEMENT",
@@ -71,6 +86,19 @@ const appCards = [
     icon: Bot,
     tags: ["AI ASSISTANT", "CONTEXT AWARE", "SECURE"],
     cta: "Open AI Assistant",
+  },
+  {
+    id: "rtsrmp",
+    label: "RTSRMP",
+    title: "REAL-TIME STIPEND RATE MANAGEMENT",
+    subtitle: "Verified Stipend Rate Master",
+    description:
+      "Collect company-submitted stipend rates, verify supporting details, and maintain an auditable rate history.",
+    accent: "orange",
+    route: "/rtsrmp/dashboard",
+    icon: CircleDollarSign,
+    tags: ["STIPEND RATES", "VERIFICATION", "REPORTS"],
+    cta: "Open RTSRMP",
   },
 ] as const;
 
@@ -194,7 +222,7 @@ export default function ApplicationSelection() {
             </div>
 
             <div className="grid gap-5 md:grid-cols-2">
-              {appCards.map(({ id, label, title, subtitle, description, accent, route, icon: Icon, tags, cta }) => (
+              {appCards.filter(({ id }) => id !== "rtsrmp" || isSuperAdmin).map(({ id, label, title, subtitle, description, accent, route, icon: Icon, tags, cta }) => (
                 <button
                   key={id}
                   type="button"

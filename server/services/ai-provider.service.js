@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createAiChat = createAiChat;
+const sarvam_service_1 = require("./sarvam.service");
 function extractText(value) {
     if (typeof value === "string")
         return value.trim();
@@ -21,7 +22,7 @@ async function sendRequest(url, headers, body, providerName) {
         method: "POST",
         headers,
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(45_000),
+        signal: AbortSignal.timeout(90_000),
     });
     if (!response.ok) {
         if (response.status === 429)
@@ -33,18 +34,48 @@ async function sendRequest(url, headers, body, providerName) {
     const payload = await response.json();
     const answer = providerName === "OpenAI"
         ? extractText(payload.choices?.[0]?.message?.content)
-        : extractText(payload.content);
+        : providerName === "Gemini" ? extractText(payload.candidates?.[0]?.content?.parts) : extractText(payload.content);
     if (!answer)
         throw new Error(`${providerName} returned an empty response. Please try again.`);
     return answer;
 }
 async function createAiChat(provider, messages) {
+    if (provider === "sarvam") {
+        return (0, sarvam_service_1.createSarvamChat)(messages);
+    }
+    if (provider === "gemini") {
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey)
+            throw new Error("Gemini is not configured. Add GEMINI_API_KEY to the server environment.");
+        const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+        const systemMessage = messages.find((message) => message.role === "system")?.content;
+        const contents = messages
+            .filter((message) => message.role !== "system")
+            .map((message) => ({ role: message.role === "assistant" ? "model" : "user", parts: [{ text: message.content }] }));
+        let lastError;
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                return await sendRequest(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { "Content-Type": "application/json", "x-goog-api-key": apiKey }, {
+                    ...(systemMessage ? { systemInstruction: { parts: [{ text: systemMessage }] } } : {}),
+                    contents,
+                    generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
+                }, "Gemini");
+            }
+            catch (error) {
+                lastError = error;
+                await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+            }
+        }
+        throw lastError;
+    }
     if (provider === "openai") {
         const apiKey = process.env.OPENAI_API_KEY;
         if (!apiKey)
             throw new Error("OpenAI is not configured. Add OPENAI_API_KEY to the server environment.");
+        const configuredModel = process.env.OPENAI_MODEL?.trim();
+        const model = configuredModel && !configuredModel.startsWith("sk-") ? configuredModel : "gpt-4.1-mini";
         return sendRequest("https://api.openai.com/v1/chat/completions", { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` }, {
-            model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+            model,
             messages,
             temperature: 0.2,
             max_tokens: 2048,

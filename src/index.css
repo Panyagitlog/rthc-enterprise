@@ -2,7 +2,53 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+.dmcfs-logo__shine {
+  overflow: hidden;
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+}
+
+.dmcfs-logo__shine::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 34%,
+    rgb(255 255 255 / 8%) 43%,
+    rgb(255 255 255 / 68%) 50%,
+    rgb(255 190 96 / 24%) 56%,
+    transparent 66%
+  );
+  content: "";
+  transform: translateX(-120%);
+  animation: dmcfs-logo-shine 5s ease-in-out infinite;
+}
+
+@keyframes dmcfs-logo-shine {
+  0%, 72%, 100% {
+    transform: translateX(-120%);
+  }
+
+  42% {
+    transform: translateX(120%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmcfs-logo__shine::after {
+    animation: none;
+    display: none;
+  }
+}
+
 :root {
+  --brand-pink: #D5287C;
+  --brand-plum: #993091;
+  --brand-dark: #6A1C5E;
+  --brand-highlight: #B22B86;
+
   --color-canvas: #f8fafc;
   --color-card: #ffffff;
   --color-card-elevated: #ffffff;
@@ -71,6 +117,70 @@
   --shadow-sm: 0 1px 2px rgba(2, 6, 23, 0.35);
   --shadow-md: 0 14px 40px rgba(2, 6, 23, 0.38);
   --shadow-lg: 0 30px 90px rgba(2, 6, 23, 0.48);
+}
+
+.login-screen {
+  --login-panel-start: #F8E6F0;
+  --login-panel-end: #F3D9E8;
+}
+
+.dark .login-screen {
+  --login-panel-start: #211326;
+  --login-panel-end: #32172B;
+}
+
+.login-form-panel {
+  background-image: linear-gradient(135deg, var(--login-panel-start), var(--login-panel-end));
+}
+
+.login-screen .login-accent-plum {
+  color: var(--brand-plum);
+}
+
+.login-screen .login-accent-pink {
+  color: var(--brand-pink);
+}
+
+.login-screen .login-gradient-text {
+  background-image: linear-gradient(90deg, var(--brand-pink), var(--brand-highlight));
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.login-screen .login-brand-button {
+  background-image: linear-gradient(110deg, var(--brand-pink), var(--brand-plum));
+}
+
+.login-screen .login-brand-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.login-screen .login-brand-button:disabled {
+  opacity: 0.88;
+}
+
+.login-screen .login-brand-button:focus-visible,
+.login-screen .login-focus-ring:focus-visible {
+  outline: 2px solid var(--brand-pink);
+  outline-offset: 2px;
+}
+
+.login-screen .login-field-active {
+  border-color: var(--brand-pink);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-pink) 15%, transparent);
+}
+
+.login-screen .login-check-active {
+  border-color: var(--brand-pink);
+  background-color: var(--brand-pink);
+}
+
+.login-screen input:-webkit-autofill,
+.login-screen input:-webkit-autofill:hover,
+.login-screen input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-text-primary);
+  -webkit-box-shadow: 0 0 0 1000px var(--color-card) inset;
+  transition: background-color 9999s ease-out 0s;
 }
 
 @theme inline {

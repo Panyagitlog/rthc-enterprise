@@ -27,11 +27,18 @@ export default function DMCFSLogo({
   ...props
 }: DMCFSLogoProps) {
   return (
-    <img
-      src={SOURCES[variant]}
-      alt="DMCFS Pvt. Ltd."
-      className={cn("block h-auto w-auto object-contain", SIZE_CLASSES[size], className)}
-      {...props}
-    />
+    <span className="dmcfs-logo relative inline-flex overflow-hidden align-middle">
+      <img
+        src={SOURCES[variant]}
+        alt="DMCFS Pvt. Ltd."
+        className={cn("dmcfs-logo__image block h-auto w-auto object-contain", SIZE_CLASSES[size], className)}
+        {...props}
+      />
+      <span
+        aria-hidden="true"
+        className="dmcfs-logo__shine pointer-events-none absolute inset-0"
+        style={{ maskImage: `url("${SOURCES[variant]}")`, WebkitMaskImage: `url("${SOURCES[variant]}")` }}
+      />
+    </span>
   );
 }

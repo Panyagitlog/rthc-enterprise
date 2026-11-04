@@ -1,4 +1,4 @@
-export type AiProvider = "openai" | "claude";
+export type AiProvider = "openai" | "claude" | "gemini" | "sarvam";
 export type ChatMessage = {
     role: "system" | "user" | "assistant";
     content: string;

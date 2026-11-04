@@ -371,7 +371,7 @@ const NetworkVisualization = () => {
       ref={canvasRef}
       className="absolute inset-0 w-full h-full"
       style={{ 
-        opacity: reducedMotion ? 0.3 : 0.8,
+        opacity: reducedMotion ? 0.08 : 0.18,
         transition: 'opacity 0.3s ease'
       }}
     />
@@ -394,7 +394,7 @@ const OperationalStatus = () => {
       </div>
       <div className="w-px h-4 bg-slate-700"></div>
       <div className="flex items-center gap-1.5">
-        <Activity className="w-3.5 h-3.5 text-cyan-400" />
+        <Activity className="w-3.5 h-3.5 text-[var(--brand-plum)]" />
         <span className="text-[10px] font-medium text-slate-400 tracking-wider">REAL-TIME WORKFORCE</span>
       </div>
     </div>
@@ -444,13 +444,13 @@ const SecurityIndicators = () => {
   ];
 
   return (
-    <div className="flex items-center justify-center gap-4 mt-6 pt-5 border-t border-slate-200">
+    <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-3 mt-6 pt-5 border-t border-slate-200 dark:border-slate-700">
       {indicators.map((item, index) => (
         <React.Fragment key={item.label}>
           {index > 0 && <div className="w-px h-8 bg-slate-200" />}
           <div className="flex items-center gap-2">
-            <item.icon className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-[11px] font-medium text-slate-500">{item.label}</span>
+            <item.icon className="w-3.5 h-3.5 text-[var(--brand-plum)]" />
+            <span className="text-[11px] font-medium text-[var(--brand-plum)]">{item.label}</span>
           </div>
         </React.Fragment>
       ))}
@@ -490,6 +490,9 @@ export default function Login() {
       case 'SUPER_ADMIN':
         navigate('/app-select', { replace: true });
         break;
+      case 'COMPANY_HR':
+       navigate('/rtsrmp/dashboard', { replace: true });
+       break;
       case 'AREA_ADMIN':
         navigate('/areadashboard', { replace: true });
         break;
@@ -641,35 +644,26 @@ export default function Login() {
   }
 
   return (
-    <div className="relative w-full min-h-dvh overflow-hidden bg-(--color-canvas) text-(--color-text-primary) transition-colors">
-      {/* Background decoration */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(37,99,235,0.05),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(6,182,212,0.03),_transparent_50%)]" />
-
-      {/* Grid pattern overlay */}
-      <div className="absolute inset-0 opacity-[0.03]" style={{
-        backgroundImage: `linear-gradient(rgba(15,23,42,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,0.1) 1px, transparent 1px)`,
-        backgroundSize: '32px 32px'
-      }} />
-
+    <div className="login-screen relative w-full min-h-dvh overflow-x-hidden text-(--color-text-primary) transition-colors">
       <div className="relative flex min-h-dvh">
         {/* ============ LEFT VISUAL SECTION ============ */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.8, ease: 'easeOut' }}
-          className="hidden min-h-dvh lg:flex w-[55%] xl:w-[58%] flex-col justify-between bg-slate-950 relative overflow-hidden"
+          className="hidden min-h-dvh lg:flex w-[55%] xl:w-[58%] flex-col justify-between bg-cover bg-center relative overflow-hidden"
+          style={{
+            backgroundImage: 'url("/logo.jpg"), linear-gradient(135deg, var(--brand-dark), var(--brand-plum))',
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+          }}
         >
-          {/* Decorative gradients */}
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
-          <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-blue-600/5 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-cyan-500/5 rounded-full blur-3xl" />
-          <div className="absolute top-1/3 right-1/3 w-[300px] h-[300px] bg-indigo-500/5 rounded-full blur-3xl" />
-
-          {/* Network visualization */}
-          <div className="absolute inset-0">
-            <NetworkVisualization />
-          </div>
-
+          <NetworkVisualization />
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 z-[1]"
+            style={{ backgroundColor: "rgba(20,10,35,0.55)" }}
+          />
           {/* Content overlay */}
           <div className="relative z-10 flex flex-col justify-between h-full p-10 xl:p-14">
             {/* Top - Logo and branding */}
@@ -702,11 +696,11 @@ export default function Login() {
             >
               <h1 className="text-4xl xl:text-5xl font-bold text-white leading-tight tracking-tight mb-4">
                 Workforce Intelligence
-                <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
+                <span className="login-gradient-text block text-transparent bg-clip-text">
                   in Real-Time
                 </span>
               </h1>
-              <p className="text-slate-400 text-sm xl:text-base leading-relaxed">
+              <p className="text-slate-200 text-sm xl:text-base leading-relaxed">
                 Enterprise-grade operational command center for managing distributed workforce across multiple locations.
               </p>
               
@@ -721,9 +715,9 @@ export default function Login() {
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.6 + index * 0.1, duration: 0.5 }}
-                    className="flex items-center gap-2.5 text-slate-300"
+                    className="flex items-center gap-2.5 text-slate-100"
                   >
-                    <item.icon className="w-4 h-4 text-blue-400" />
+                    <item.icon className="w-4 h-4 text-[var(--brand-pink)]" />
                     <span className="text-sm">{item.text}</span>
                   </motion.div>
                 ))}
@@ -755,7 +749,7 @@ export default function Login() {
         </motion.div>
 
         {/* ============ RIGHT LOGIN SECTION ============ */}
-        <div className="flex min-h-dvh flex-1 items-center justify-center bg-(--color-canvas) p-6 transition-colors sm:p-8 lg:p-12">
+        <div className="login-form-panel flex min-h-dvh min-w-0 flex-1 items-center justify-center p-6 transition-colors sm:p-8 lg:p-12">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -792,7 +786,7 @@ export default function Login() {
                 <label 
                   htmlFor="email"
                   className={`block text-xs font-semibold mb-2 transition-colors duration-200 ${
-                    focusedField === 'email' ? 'text-blue-600' : 'text-slate-600 dark:text-slate-300'
+                    focusedField === 'email' ? 'text-[var(--brand-pink)]' : 'text-slate-600 dark:text-slate-300'
                   }`}
                 >
                   Email address
@@ -802,7 +796,7 @@ export default function Login() {
                 }`}>
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
                     <Mail className={`w-4 h-4 transition-colors duration-200 ${
-                      focusedField === 'email' ? 'text-blue-600' : 'text-slate-400'
+                      focusedField === 'email' ? 'text-[var(--brand-pink)]' : 'text-[var(--brand-plum)]'
                     }`} />
                   </div>
                   <input
@@ -816,7 +810,7 @@ export default function Login() {
                     autoComplete="email"
                     className={`w-full h-[52px] pl-11 pr-4 rounded-xl border bg-(--color-card) text-sm text-(--color-text-primary) placeholder:text-(--color-text-muted) transition-all duration-200 outline-none ${
                       focusedField === 'email'
-                        ? 'border-blue-500 ring-2 ring-blue-500/15 shadow-sm'
+                        ? 'login-field-active'
                         : 'border-(--color-border-strong) hover:border-(--color-primary)'
                     }`}
                     disabled={loading}
@@ -830,7 +824,7 @@ export default function Login() {
                 <label 
                   htmlFor="password"
                   className={`block text-xs font-semibold mb-2 transition-colors duration-200 ${
-                    focusedField === 'password' ? 'text-blue-600' : 'text-slate-600 dark:text-slate-300'
+                    focusedField === 'password' ? 'text-[var(--brand-pink)]' : 'text-slate-600 dark:text-slate-300'
                   }`}
                 >
                   Password
@@ -840,7 +834,7 @@ export default function Login() {
                 }`}>
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
                     <Lock className={`w-4 h-4 transition-colors duration-200 ${
-                      focusedField === 'password' ? 'text-blue-600' : 'text-slate-400'
+                      focusedField === 'password' ? 'text-[var(--brand-pink)]' : 'text-[var(--brand-plum)]'
                     }`} />
                   </div>
                   <input
@@ -854,7 +848,7 @@ export default function Login() {
                     autoComplete="current-password"
                     className={`w-full h-[52px] pl-11 pr-12 rounded-xl border bg-(--color-card) text-sm text-(--color-text-primary) placeholder:text-(--color-text-muted) transition-all duration-200 outline-none ${
                       focusedField === 'password'
-                        ? 'border-blue-500 ring-2 ring-blue-500/15 shadow-sm'
+                        ? 'login-field-active'
                         : 'border-(--color-border-strong) hover:border-(--color-primary)'
                     }`}
                     disabled={loading}
@@ -868,9 +862,9 @@ export default function Login() {
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? (
-                      <EyeOff className="w-4 h-4" />
+                      <EyeOff className="w-4 h-4 text-[var(--brand-plum)]" />
                     ) : (
-                      <Eye className="w-4 h-4" />
+                      <Eye className="w-4 h-4 text-[var(--brand-plum)]" />
                     )}
                   </button>
                 </div>
@@ -888,7 +882,7 @@ export default function Login() {
                   />
                   <div className={`w-4.5 h-4.5 rounded-md border-2 flex items-center justify-center transition-all duration-200 ${
                     rememberMe 
-                      ? 'bg-blue-600 border-blue-600' 
+                      ? 'login-check-active'
                       : 'border-slate-300 group-hover:border-slate-400 dark:border-slate-600 dark:group-hover:border-slate-500'
                   }`}>
                     {rememberMe && (
@@ -903,7 +897,7 @@ export default function Login() {
                 </label>
                 <button
                   type="button"
-                  className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                  className="login-accent-pink login-focus-ring text-sm font-medium hover:underline transition-colors"
                   onClick={() => toast.info('Password reset feature coming soon')}
                 >
                   Forgot password?
@@ -949,12 +943,11 @@ export default function Login() {
               <motion.button
                 type="submit"
                 disabled={loading || !email || !password}
-                className="relative w-full h-[52px] rounded-xl bg-blue-600 text-white font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden group"
+                className="login-brand-button login-focus-ring relative w-full h-[52px] rounded-xl text-white font-semibold text-sm disabled:cursor-not-allowed overflow-hidden group"
                 whileHover={{ scale: loading ? 1 : 1.005 }}
                 whileTap={{ scale: loading ? 1 : 0.99 }}
                 transition={{ duration: 0.15 }}
               >
-                <span className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-700 group-hover:from-blue-500 group-hover:to-blue-600 transition-all duration-300" />
                 <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
                 <span className="relative flex items-center justify-center gap-2.5">
                   {loading ? (
@@ -981,7 +974,7 @@ export default function Login() {
               <span>Version {version}</span>
               <span className="w-px h-3 bg-slate-200" />
               <span className="flex items-center gap-1">
-                <Shield className="w-3 h-3 text-blue-500" />
+                <Shield className="w-3 h-3 text-[var(--brand-plum)]" />
                 DMCFS Enterprise
               </span>
             </div>

@@ -1,0 +1,2630 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BadgeCheck,
+  Building2,
+  CalendarClock,
+  ChevronDown,
+  CheckCircle2,
+  CircleAlert,
+  FileCheck2,
+  FileSpreadsheet,
+  FileText,
+  Filter,
+  MapPin,
+  Plus,
+  Printer,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Upload,
+  Users,
+  X,
+} from "lucide-react";
+import ExcelJS from "exceljs";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import DMCFSLogo from "../../components/brand/DMCFSLogo";
+import { useRTSRMPProfile } from "./profile-context";
+import {
+  createDocumentUrl,
+  loadRTSRMPData,
+  reviewSubmission,
+  safeErrorMessage,
+  saveDetails,
+  saveDraft,
+  submitDraft,
+  uploadSupportingDocument,
+  DEFAULT_QUALIFICATIONS,
+  DEFAULT_SCHEMES,
+  resolveOptionId,
+} from "./services";
+import {
+  RTSRMP_BENEFIT_TYPES,
+  RTSRMP_DOCUMENT_TYPES,
+  RTSRMP_REPORT_TYPES,
+  type RTSRMPBenefit,
+  type RTSRMPData,
+  type RTSRMPDeduction,
+  type RTSRMPHistory,
+  type RTSRMPOvertime,
+  type RTSRMPRequirement,
+  type RTSRMPStatus,
+  type RTSRMPSubmission,
+} from "./types";
+import "./rtsrmp.css";
+
+const pageSize = 10;
+
+type WithSubmission = { submission_id: string };
+
+type BenefitDraft = {
+  benefit_type: string;
+  applicable: boolean;
+  value: string;
+  amount: string;
+  frequency: string;
+  remarks: string;
+  effective_from: string;
+  effective_to: string;
+};
+
+type DeductionDraft = {
+  deduction_type: string;
+  applicable: boolean;
+  amount: string;
+  percentage: string;
+  frequency: string;
+  reason: string;
+  remarks: string;
+};
+
+type DraftForm = {
+  id?: string;
+  status?: RTSRMPStatus;
+  scheme_id: string;
+  qualification_id: string;
+  trade: string;
+  stipend_rate: string;
+  effective_from: string;
+  effective_to: string;
+  payment_frequency: string;
+  currency: string;
+  coordinator_name: string;
+  coordinator_contact: string;
+  current_students: string;
+  requirement_count: string;
+  remarks: string;
+  overtime: {
+    applicable: boolean;
+    ot_rate: string;
+    calculation_basis: string;
+    rate_unit: string;
+    maximum_hours: string;
+    remarks: string;
+    effective_from: string;
+    effective_to: string;
+  };
+  benefits: BenefitDraft[];
+  deductions: DeductionDraft[];
+  eligibility: {
+    min_age: string;
+    max_age: string;
+    education: string;
+    qualification: string;
+    trade: string;
+    experience: string;
+    gender: string;
+    other: string;
+    remarks: string;
+  };
+  requirement: {
+    requirement_count: string;
+    current_students: string;
+    preferred_joining_timeline: string;
+    remarks: string;
+  };
+};
+
+const emptyBenefit = (benefit_type: string): BenefitDraft => ({
+  benefit_type,
+  applicable: false,
+  value: "",
+  amount: "",
+  frequency: "",
+  remarks: "",
+  effective_from: "",
+  effective_to: "",
+});
+
+function blankForm(): DraftForm {
+  return {
+    scheme_id: "",
+    qualification_id: "",
+    trade: "",
+    stipend_rate: "",
+    effective_from: "",
+    effective_to: "",
+    payment_frequency: "MONTHLY",
+    currency: "INR",
+    coordinator_name: "",
+    coordinator_contact: "",
+    current_students: "",
+    requirement_count: "",
+    remarks: "",
+    overtime: {
+      applicable: false,
+      ot_rate: "",
+      calculation_basis: "",
+      rate_unit: "HOURLY",
+      maximum_hours: "",
+      remarks: "",
+      effective_from: "",
+      effective_to: "",
+    },
+    benefits: RTSRMP_BENEFIT_TYPES.map(emptyBenefit),
+    deductions: [],
+    eligibility: {
+      min_age: "",
+      max_age: "",
+      education: "",
+      qualification: "",
+      trade: "",
+      experience: "",
+      gender: "",
+      other: "",
+      remarks: "",
+    },
+    requirement: {
+      requirement_count: "",
+      current_students: "",
+      preferred_joining_timeline: "",
+      remarks: "",
+    },
+  };
+}
+
+function getForm(submission: RTSRMPSubmission, data: RTSRMPData): DraftForm {
+  const form = blankForm();
+  const overtime = data.overtime.find((item) => item.submission_id === submission.id);
+  const eligibility = data.eligibility.find((item) => item.submission_id === submission.id);
+  const requirement = data.requirements.find((item) => item.submission_id === submission.id);
+  const benefits = data.benefits.filter((item) => item.submission_id === submission.id);
+  const deductions = data.deductions.filter((item) => item.submission_id === submission.id);
+
+  form.id = submission.id;
+  form.status = submission.status;
+  form.scheme_id = submission.scheme_id ?? "";
+  form.qualification_id = submission.qualification_id ?? "";
+  form.trade = submission.trade ?? "";
+  form.stipend_rate = String(submission.stipend_rate);
+  form.effective_from = submission.effective_from;
+  form.effective_to = submission.effective_to ?? "";
+  form.payment_frequency = submission.payment_frequency;
+  form.currency = submission.currency;
+  form.coordinator_name = submission.coordinator_name ?? "";
+  form.coordinator_contact = submission.coordinator_contact ?? "";
+  form.current_students = submission.current_students == null ? "" : String(submission.current_students);
+  form.requirement_count = submission.requirement_count == null ? "" : String(submission.requirement_count);
+  form.remarks = submission.remarks ?? "";
+
+  if (overtime) {
+    form.overtime = {
+      applicable: overtime.applicable,
+      ot_rate: overtime.ot_rate == null ? "" : String(overtime.ot_rate),
+      calculation_basis: overtime.calculation_basis ?? "",
+      rate_unit: overtime.rate_unit ?? "",
+      maximum_hours: overtime.maximum_hours == null ? "" : String(overtime.maximum_hours),
+      remarks: overtime.remarks ?? "",
+      effective_from: overtime.effective_from ?? "",
+      effective_to: overtime.effective_to ?? "",
+    };
+  }
+
+  if (benefits.length) {
+    form.benefits = benefits.map((item) => ({
+      benefit_type: item.benefit_type,
+      applicable: item.applicable,
+      value: item.value ?? "",
+      amount: item.amount == null ? "" : String(item.amount),
+      frequency: item.frequency ?? "",
+      remarks: item.remarks ?? "",
+      effective_from: item.effective_from ?? "",
+      effective_to: item.effective_to ?? "",
+    }));
+  }
+  form.deductions = deductions.map((item) => ({
+    deduction_type: item.deduction_type,
+    applicable: item.applicable,
+    amount: item.amount == null ? "" : String(item.amount),
+    percentage: item.percentage == null ? "" : String(item.percentage),
+    frequency: item.frequency ?? "",
+    reason: item.reason ?? "",
+    remarks: item.remarks ?? "",
+  }));
+  if (eligibility) {
+    form.eligibility = {
+      min_age: eligibility.min_age == null ? "" : String(eligibility.min_age),
+      max_age: eligibility.max_age == null ? "" : String(eligibility.max_age),
+      education: eligibility.education ?? "",
+      qualification: eligibility.qualification ?? "",
+      trade: eligibility.trade ?? "",
+      experience: eligibility.experience ?? "",
+      gender: eligibility.gender ?? "",
+      other: JSON.stringify(eligibility.other_criteria ?? {}),
+      remarks: eligibility.remarks ?? "",
+    };
+  }
+  if (requirement) {
+    form.requirement = {
+      requirement_count: String(requirement.requirement_count),
+      current_students: requirement.current_students == null ? "" : String(requirement.current_students),
+      preferred_joining_timeline: requirement.preferred_joining_timeline ?? "",
+      remarks: requirement.remarks ?? "",
+    };
+  }
+  return form;
+}
+
+function displayDate(value?: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-IN");
+}
+
+function currency(value: number | string, code = "INR"): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: code,
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
+}
+
+function StatusPill({ status }: { status: RTSRMPStatus | string }) {
+  const styles: Record<string, string> = {
+    APPROVED: "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-300",
+    SUBMITTED: "bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-900/30 dark:text-sky-300",
+    UNDER_VERIFICATION: "bg-violet-50 text-violet-700 ring-violet-600/20 dark:bg-violet-900/30 dark:text-violet-300",
+    CORRECTION_REQUIRED: "bg-amber-50 text-amber-800 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-200",
+    REJECTED: "bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-900/30 dark:text-rose-300",
+    EXPIRED: "bg-slate-100 text-slate-700 ring-slate-500/20 dark:bg-slate-800 dark:text-slate-300",
+    DRAFT: "bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-800 dark:text-slate-300",
+  };
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${styles[status] ?? styles.DRAFT}`}>
+      {status.replaceAll("_", " ")}
+    </span>
+  );
+}
+
+const routeSections = [
+  ["dashboard", "Dashboard", "/rtsrmp/dashboard"],
+  ["companies", "Company Master", "/rtsrmp/companies"],
+  ["stipend-rates", "Stipend Rate Collection", "/rtsrmp/stipend-rates"],
+  ["overtime", "OT / Extra Time", "/rtsrmp/overtime"],
+  ["benefits", "Benefits", "/rtsrmp/benefits"],
+  ["deductions", "Deductions", "/rtsrmp/deductions"],
+  ["eligibility", "Eligibility", "/rtsrmp/eligibility"],
+  ["requirements", "Company Requirements", "/rtsrmp/requirements"],
+  ["documents", "Supporting Documents", "/rtsrmp/documents"],
+  ["verification", "Verification", "/rtsrmp/verification"],
+  ["history", "Rate History", "/rtsrmp/history"],
+  ["comparison", "Comparison", "/rtsrmp/comparison"],
+  ["pending", "Pending & Expiring", "/rtsrmp/pending"],
+  ["reports", "Reports", "/rtsrmp/reports"],
+] as const;
+const adminOnlySections = ["companies", "verification", "comparison", "pending"];
+
+export default function RTSRMPApp() {
+  const profile = useRTSRMPProfile();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isAdmin = profile.role === "SUPER_ADMIN";
+  const isCompanyHR = profile.role === "COMPANY_HR";
+  const section = location.pathname.split("/")[2] || "dashboard";
+  const [data, setData] = useState<RTSRMPData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [submittedSummary, setSubmittedSummary] = useState<string[] | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<DraftForm | null>(null);
+  const [uploadType, setUploadType] = useState<string>(RTSRMP_DOCUMENT_TYPES[0]);
+  const [uploading, setUploading] = useState(false);
+  const [reviewTarget, setReviewTarget] = useState<RTSRMPSubmission | null>(null);
+  const [reviewRemarks, setReviewRemarks] = useState("");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [companyFilter, setCompanyFilter] = useState("ALL");
+  const [locationFilter, setLocationFilter] = useState("ALL");
+  const [schemeFilter, setSchemeFilter] = useState("");
+  const [qualificationFilter, setQualificationFilter] = useState("");
+  const [effectiveFrom, setEffectiveFrom] = useState("");
+  const [effectiveTo, setEffectiveTo] = useState("");
+  const [submissionFrom, setSubmissionFrom] = useState("");
+  const [submissionTo, setSubmissionTo] = useState("");
+  const [verificationFrom, setVerificationFrom] = useState("");
+  const [verificationTo, setVerificationTo] = useState("");
+  const [reportType, setReportType] = useState<string>(RTSRMP_REPORT_TYPES[0]);
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState("created_at");
+  const [sortAscending, setSortAscending] = useState(false);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setData(await loadRTSRMPData());
+    } catch (cause) {
+      setError(safeErrorMessage(cause));
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const companyMap = useMemo(
+    () => new Map((data?.companies ?? []).map((company) => [company.company_id, company])),
+    [data?.companies],
+  );
+  const locationMap = useMemo(
+    () => new Map((data?.locations ?? []).map((item) => [item.location_id, item])),
+    [data?.locations],
+  );
+
+  const currentCompany = profile.company_id ? companyMap.get(profile.company_id) : undefined;
+  const currentLocation = profile.location_id ? locationMap.get(profile.location_id) : undefined;
+
+  const scopedSubmissions = useMemo(() => data?.submissions ?? [], [data?.submissions]);
+  const filteredSubmissions = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const filtered = scopedSubmissions.filter((submission) => {
+      const company = companyMap.get(submission.company_id);
+      const locationValue = locationMap.get(submission.location_id);
+      const searchable = [
+        company?.company_name ?? "",
+        locationValue?.location_name ?? "",
+        submission.scheme,
+        submission.qualification,
+        submission.trade ?? "",
+        submission.coordinator_name ?? "",
+      ].join(" ").toLowerCase();
+
+      return (
+        (!query || searchable.includes(query)) &&
+        (statusFilter === "ALL" || submission.status === statusFilter) &&
+        (companyFilter === "ALL" || submission.company_id === companyFilter) &&
+        (locationFilter === "ALL" || submission.location_id === locationFilter) &&
+        (!schemeFilter || submission.scheme.toLowerCase().includes(schemeFilter.toLowerCase())) &&
+        (!qualificationFilter || submission.qualification.toLowerCase().includes(qualificationFilter.toLowerCase())) &&
+        (!effectiveFrom || submission.effective_from >= effectiveFrom) &&
+        (!effectiveTo || !submission.effective_to || submission.effective_to <= effectiveTo) &&
+        (!submissionFrom || (submission.submitted_at ?? "").slice(0, 10) >= submissionFrom) &&
+        (!submissionTo || (submission.submitted_at ?? "").slice(0, 10) <= submissionTo) &&
+        (!verificationFrom || (submission.verified_at ?? "").slice(0, 10) >= verificationFrom) &&
+        (!verificationTo || (submission.verified_at ?? "").slice(0, 10) <= verificationTo)
+      );
+    });
+    return filtered.sort((left, right) => {
+      const l = left[sortBy as keyof RTSRMPSubmission];
+      const r = right[sortBy as keyof RTSRMPSubmission];
+      const comparison = String(l ?? "").localeCompare(String(r ?? ""), undefined, { numeric: true });
+      return sortAscending ? comparison : -comparison;
+    });
+  }, [
+    scopedSubmissions,
+    companyMap,
+    locationMap,
+    search,
+    statusFilter,
+    companyFilter,
+    locationFilter,
+    schemeFilter,
+    qualificationFilter,
+    effectiveFrom,
+    effectiveTo,
+    submissionFrom,
+    submissionTo,
+    verificationFrom,
+    verificationTo,
+    sortBy,
+    sortAscending,
+  ]);
+
+  const visibleRates = useMemo(() => {
+    if (section === "verification") {
+      return filteredSubmissions.filter((item) => ["SUBMITTED", "UNDER_VERIFICATION"].includes(item.status));
+    }
+    if (section === "stipend-rates") return filteredSubmissions;
+    if (section === "overtime") {
+      const ids = new Set((data?.overtime ?? []).map((item) => item.submission_id));
+      return filteredSubmissions.filter((item) => ids.has(item.id));
+    }
+    if (section === "benefits") {
+      const ids = new Set((data?.benefits ?? []).map((item) => item.submission_id));
+      return filteredSubmissions.filter((item) => ids.has(item.id));
+    }
+    if (section === "deductions") {
+      const ids = new Set((data?.deductions ?? []).map((item) => item.submission_id));
+      return filteredSubmissions.filter((item) => ids.has(item.id));
+    }
+    if (section === "eligibility") {
+      const ids = new Set((data?.eligibility ?? []).map((item) => item.submission_id));
+      return filteredSubmissions.filter((item) => ids.has(item.id));
+    }
+    if (section === "requirements") {
+      const ids = new Set((data?.requirements ?? []).map((item) => item.submission_id));
+      return filteredSubmissions.filter((item) => ids.has(item.id));
+    }
+    return filteredSubmissions;
+  }, [section, filteredSubmissions, data]);
+
+  const pageCount = Math.max(1, Math.ceil(visibleRates.length / pageSize));
+  const pageRows = visibleRates.slice((page - 1) * pageSize, page * pageSize);
+  const getCompanyName = (id: string) => companyMap.get(id)?.company_name ?? "Company";
+  const getLocationName = (id: string) => locationMap.get(id)?.location_name ?? "Location";
+  const getCompanyHRName = (profileId: string | null) => {
+    if (!profileId) return "—";
+    const submitter = data?.companyUsers.find((user) => user.profile_id === profileId);
+    return submitter?.name || submitter?.email || profileId;
+  };
+
+  const openNewDraft = () => {
+    setForm(blankForm());
+  };
+
+  const openEditDraft = (submission: RTSRMPSubmission) => {
+    if (!data) return;
+    setForm(getForm(submission, data));
+  };
+
+  const handleSave = async (submit: boolean) => {
+    if (!form) return;
+    if (profile.role !== "COMPANY_HR" || !profile.company_id || !profile.location_id) {
+      setError("Only a Company HR account with an assigned company and location can submit stipend data. Sign in as Company HR.");
+      return;
+    }
+    if (!form.scheme_id || !form.qualification_id || !form.effective_from) {
+      setError("Scheme, qualification, and effective-from date are required.");
+      return;
+    }
+    if (!form.payment_frequency.trim() || !form.currency.trim()) {
+      setError("Payment frequency and currency are required.");
+      return;
+    }
+    const stipend = Number(form.stipend_rate);
+    if (!form.stipend_rate.trim() || !Number.isFinite(stipend) || stipend < 0) {
+      setError("Enter a valid non-negative stipend rate.");
+      return;
+    }
+    const countValues = [
+      form.current_students,
+      form.requirement_count,
+      form.requirement.current_students,
+      form.requirement.requirement_count,
+    ];
+    if (countValues.some((value) => value !== "" &&
+      (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value) > 2_147_483_647))) {
+      setError("Student and trainee counts must be non-negative whole numbers.");
+      return;
+    }
+    const nonNegativeValues = [
+      form.overtime.ot_rate,
+      form.overtime.maximum_hours,
+      ...form.benefits.map((benefit) => benefit.amount),
+      ...form.deductions.flatMap((deduction) => [deduction.amount, deduction.percentage]),
+      form.eligibility.min_age,
+      form.eligibility.max_age,
+    ];
+    if (nonNegativeValues.some((value) => value !== "" && (!Number.isFinite(Number(value)) || Number(value) < 0))) {
+      setError("Rates, amounts, hours, ages, and percentages must be non-negative numbers.");
+      return;
+    }
+    const monetaryValues = [
+      form.stipend_rate,
+      form.overtime.ot_rate,
+      ...form.benefits.map((benefit) => benefit.amount),
+      ...form.deductions.map((deduction) => deduction.amount),
+    ];
+    if (monetaryValues.some((value) => value !== "" && !fitsDecimal(value, 2, 9999999999.99))) {
+      setError("Stipend, overtime, benefit, and deduction amounts must fit a two-decimal currency value.");
+      return;
+    }
+    if (
+      (form.overtime.maximum_hours !== "" && !fitsDecimal(form.overtime.maximum_hours, 2, 999999.99)) ||
+      form.deductions.some((deduction) => deduction.percentage !== "" && !fitsDecimal(deduction.percentage, 4, 100))
+    ) {
+      setError("Overtime hours and deduction percentages exceed their allowed precision or range.");
+      return;
+    }
+    if (form.deductions.some((deduction) => deduction.amount.trim() && deduction.percentage.trim())) {
+      setError("Each deduction must use either an amount or a percentage, not both.");
+      return;
+    }
+    if (form.deductions.some((deduction) =>
+      !deduction.deduction_type.trim() &&
+      [deduction.amount, deduction.percentage, deduction.frequency, deduction.reason, deduction.remarks].some((value) => value.trim()),
+    )) {
+      setError("Enter a deduction type for every deduction that contains information.");
+      return;
+    }
+    if (form.deductions.some((deduction) => deduction.percentage.trim() && Number(deduction.percentage) > 100)) {
+      setError("Deduction percentages must be between 0 and 100.");
+      return;
+    }
+    if (form.deductions.some((deduction) =>
+      deduction.deduction_type.trim() &&
+      deduction.applicable &&
+      !deduction.amount.trim() &&
+      !deduction.percentage.trim(),
+    )) {
+      setError("Enter an amount or percentage for each applicable deduction.");
+      return;
+    }
+    if (form.overtime.applicable && !form.overtime.ot_rate.trim()) {
+      setError("Enter the overtime rate when overtime is applicable.");
+      return;
+    }
+    if (form.eligibility.min_age && form.eligibility.max_age && Number(form.eligibility.max_age) < Number(form.eligibility.min_age)) {
+      setError("Maximum age cannot be lower than minimum age.");
+      return;
+    }
+    if ([form.eligibility.min_age, form.eligibility.max_age].some((value) =>
+      value && (!/^\d+$/.test(value) || Number(value) > 2_147_483_647),
+    )) {
+      setError("Age limits must be whole numbers.");
+      return;
+    }
+    if (form.overtime.effective_from && form.overtime.effective_to && form.overtime.effective_to < form.overtime.effective_from) {
+      setError("OT effective-to date cannot be earlier than its effective-from date.");
+      return;
+    }
+    if (form.benefits.some((benefit) => benefit.effective_from && benefit.effective_to && benefit.effective_to < benefit.effective_from)) {
+      setError("A benefit effective-to date cannot be earlier than its effective-from date.");
+      return;
+    }
+    if (form.effective_to && form.effective_to < form.effective_from) {
+      setError("Effective-to date cannot be earlier than effective-from date.");
+      return;
+    }
+    if (
+      form.coordinator_contact &&
+      (!/^[\d+().\-\s]{7,20}$/.test(form.coordinator_contact.trim()) ||
+        form.coordinator_contact.replace(/\D/g, "").length < 7 ||
+        form.coordinator_contact.replace(/\D/g, "").length > 15)
+    ) {
+      setError("Enter a valid coordinator contact number.");
+      return;
+    }
+    const parsedOtherCriteria = form.eligibility.other.trim()
+      ? parseJsonObject(form.eligibility.other)
+      : {};
+    if (parsedOtherCriteria === null) {
+      setError("Other eligibility criteria must be valid JSON (for example: {\"document\":\"Required\"}).");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setSuccessMessage("");
+    try {
+      const schemeId = await resolveOptionId("scheme", form.scheme_id);
+      const qualificationId = await resolveOptionId("qualification", form.qualification_id);
+      const input = {
+        id: form.id,
+        company_id: profile.company_id,
+        location_id: profile.location_id,
+        scheme_id: schemeId,
+        qualification_id: qualificationId,
+        trade: form.trade,
+        stipend_rate: stipend,
+        effective_from: form.effective_from,
+        effective_to: form.effective_to || null,
+        payment_frequency: form.payment_frequency,
+        currency: form.currency,
+        remarks: form.remarks,
+        created_by: profile.id,
+      };
+      const submissionId = await saveDraft(input);
+      setForm((current) => current ? { ...current, id: submissionId } : current);
+      await saveDetails(submissionId, {
+        overtime: {
+          applicable: form.overtime.applicable,
+          ot_rate: form.overtime.ot_rate ? Number(form.overtime.ot_rate) : null,
+          calculation_basis: form.overtime.calculation_basis,
+          rate_unit: form.overtime.rate_unit,
+          maximum_hours: form.overtime.maximum_hours ? Number(form.overtime.maximum_hours) : null,
+          remarks: form.overtime.remarks,
+          effective_from: form.overtime.effective_from || null,
+          effective_to: form.overtime.effective_to || null,
+        },
+        benefits: form.benefits.map((benefit) => ({
+          benefit_type: benefit.benefit_type,
+          applicable: benefit.applicable,
+          value: benefit.value,
+          amount: benefit.amount ? Number(benefit.amount) : null,
+          frequency: benefit.frequency,
+          remarks: benefit.remarks,
+          effective_from: benefit.effective_from || null,
+          effective_to: benefit.effective_to || null,
+        })),
+        deductions: form.deductions
+          .filter((deduction) => deduction.deduction_type.trim())
+          .map((deduction) => ({
+            deduction_type: deduction.deduction_type,
+            applicable: deduction.applicable,
+            amount: deduction.amount ? Number(deduction.amount) : null,
+            percentage: deduction.percentage ? Number(deduction.percentage) : null,
+            frequency: deduction.frequency,
+            reason: deduction.reason,
+            remarks: deduction.remarks,
+          })),
+        eligibility: {
+          min_age: form.eligibility.min_age ? Number(form.eligibility.min_age) : null,
+          max_age: form.eligibility.max_age ? Number(form.eligibility.max_age) : null,
+          education: form.eligibility.education,
+          qualification: form.eligibility.qualification,
+          trade: form.eligibility.trade,
+          experience: form.eligibility.experience,
+          gender: form.eligibility.gender,
+          other_criteria: parsedOtherCriteria,
+          remarks: form.eligibility.remarks,
+        },
+        requirement: {
+          company_id: profile.company_id,
+          location_id: profile.location_id,
+          scheme_id: schemeId,
+          qualification_id: qualificationId,
+          trade: form.trade,
+          requirement_count: form.requirement.requirement_count
+            ? Number(form.requirement.requirement_count)
+            : Number(form.requirement_count || 0),
+          preferred_joining_timeline: form.requirement.preferred_joining_timeline,
+          remarks: form.requirement.remarks,
+        },
+      });
+      setForm((current) => current ? { ...current, id: submissionId, status: current.status ?? "DRAFT" } : current);
+      if (submit) await submitDraft(submissionId);
+      setSuccessMessage(submit ? "Data filled and submitted successfully. It is now available to the Super Admin for verification." : "Draft saved successfully.");
+      if (submit) {
+        setSubmittedSummary([
+          `Company: ${currentCompany?.company_name ?? "-"}`,
+          `Location: ${currentLocation?.location_name ?? "-"}`,
+          `Scheme: ${data?.schemes.find((item) => item.id === schemeId)?.name ?? form.scheme_id.replace("new:", "")}`,
+          `Qualification: ${data?.qualifications.find((item) => item.id === qualificationId)?.qualification_name ?? form.qualification_id.replace("new:", "")}`,
+          `Trade: ${form.trade || "-"}`,
+          `Stipend rate: ${form.currency} ${stipend} (${form.payment_frequency})`,
+          `Effective from: ${form.effective_from}${form.effective_to ? ` to ${form.effective_to}` : ""}`,
+          `Benefits: ${form.benefits.length}   Deductions: ${form.deductions.length}`,
+          `Status: SUBMITTED`,
+        ]);
+      }
+      setForm(null);
+      await refresh();
+    } catch (cause) {
+      setError(safeErrorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpload = async (file?: File | null) => {
+    if (!form?.id || !profile.company_id || !profile.location_id || !file || !data) {
+      setError("Save the draft before uploading supporting documents.");
+      return;
+    }
+    const submission = data.submissions.find((item) => item.id === form.id);
+    if (!submission) {
+      setError("Save and refresh the draft before uploading supporting documents.");
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setError("Supporting documents must be 15 MB or smaller.");
+      return;
+    }
+    setUploading(true);
+    setError("");
+    setSuccessMessage("");
+    try {
+      await uploadSupportingDocument(file, profile, submission, uploadType);
+      setSuccessMessage("Supporting document uploaded securely.");
+      await refresh();
+    } catch (cause) {
+      setError(safeErrorMessage(cause));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleReview = async (
+    action: "UNDER_VERIFICATION" | "APPROVED" | "REJECTED" | "CORRECTION_REQUIRED",
+  ) => {
+    if (!reviewTarget) return;
+    if (["REJECTED", "CORRECTION_REQUIRED"].includes(action) && !reviewRemarks.trim()) {
+      setError("Remarks are required when rejecting a submission or requesting corrections.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    setSuccessMessage("");
+    try {
+      await reviewSubmission(reviewTarget.id, action, reviewRemarks);
+      setSuccessMessage(`Verification action recorded: ${action.replaceAll("_", " ")}.`);
+      setReviewTarget(null);
+      setReviewRemarks("");
+      await refresh();
+    } catch (cause) {
+      setError(safeErrorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetFilters = () => {
+    setSearch("");
+    setStatusFilter("ALL");
+    setCompanyFilter("ALL");
+    setLocationFilter("ALL");
+    setSchemeFilter("");
+    setQualificationFilter("");
+    setEffectiveFrom("");
+    setEffectiveTo("");
+    setSubmissionFrom("");
+    setSubmissionTo("");
+    setVerificationFrom("");
+    setVerificationTo("");
+    setPage(1);
+  };
+
+  const reportRows = useMemo(() => {
+    if (reportType === "Pending Submission Report") {
+      return filteredSubmissions.filter((item) => item.status !== "APPROVED");
+    }
+    if (reportType === "Approved Rate Report") {
+      return filteredSubmissions.filter((item) => item.status === "APPROVED");
+    }
+    if (reportType === "Rejected / Correction Report") {
+      return filteredSubmissions.filter((item) => ["REJECTED", "CORRECTION_REQUIRED"].includes(item.status));
+    }
+    if (reportType === "Expiring Rate Report") {
+      const limit = new Date();
+      limit.setDate(limit.getDate() + 90);
+      const threshold = limit.toISOString().slice(0, 10);
+      const today = new Date().toISOString().slice(0, 10);
+      return filteredSubmissions.filter(
+        (item) => item.status === "APPROVED" && item.effective_to && item.effective_to >= today && item.effective_to <= threshold,
+      );
+    }
+    return filteredSubmissions;
+  }, [filteredSubmissions, reportType]);
+
+  const exportWorkbook = async (
+    exportRows: RTSRMPSubmission[] = reportRows,
+    exportName = reportType,
+    applyCurrentFilters = true,
+  ) => {
+    if (!data || !exportRows.length) return;
+
+    function matches<T extends WithSubmission>(submissionId: string, collection: T[]): T[] {
+      return collection.filter((item) => item.submission_id === submissionId);
+    }
+
+    function detailRows<T extends WithSubmission>(
+      items: T[],
+      map: (item: T) => Record<string, unknown>,
+    ): Record<string, unknown>[] {
+      return items
+        .filter((item) => exportRows.some((rate) => rate.id === item.submission_id))
+        .map(map);
+    }
+
+    const masterRows = exportRows.map((item, index) => {
+      const benefits = matches(item.id, data.benefits);
+      const deductions = matches(item.id, data.deductions);
+      const eligibility = data.eligibility.find((row) => row.submission_id === item.id);
+      const getBenefit = (type: string) => benefits.find((benefit) => benefit.benefit_type.toLowerCase() === type.toLowerCase());
+      const hasQualification = (labels: string[]) => {
+        const qualificationText = (eligibility?.qualification || item.qualification).toLowerCase();
+        return labels.some((label) => qualificationText.includes(label.toLowerCase()));
+      };
+      const getQualificationAmount = (labels: string[]) => labels.some((label) =>
+        item.qualification.toLowerCase().includes(label.toLowerCase()),
+      ) ? item.stipend_rate : "";
+      const bus = getBenefit("Bus Facility");
+      const canteen = getBenefit("Canteen Facility");
+      const accommodation = getBenefit("Accommodation");
+      return {
+        "Sr.": index + 1,
+        "Company Name": getCompanyName(item.company_id),
+        Location: getLocationName(item.location_id),
+        Scheme: item.scheme,
+        Coordinator: item.coordinator_name ?? "",
+        "Contact No": item.coordinator_contact ?? "",
+        "Current Students": item.current_students ?? "",
+        Requirements: item.requirement_count ?? "",
+        "Stipend 10th": getQualificationAmount(["10th", "secondary"]),
+        "Stipend 12th": getQualificationAmount(["12th", "higher secondary"]),
+        "Stipend ITI": getQualificationAmount(["iti"]),
+        "Stipend Diploma": getQualificationAmount(["diploma"]),
+        "Stipend Graduation BE": getQualificationAmount(["graduation be", "graduate be", "engineering"]),
+        "Stipend Graduation Non BE": getQualificationAmount(["graduation non be", "non be"]),
+        "Attendance Bonus": getBenefit("Attendance Bonus")?.amount ?? "",
+        DBT: getBenefit("DBT")?.amount ?? "",
+        "Eligible 10th": eligibility?.qualification ? (hasQualification(["10th", "secondary"]) ? "YES" : "NO") : "",
+        "Eligible 12th": eligibility?.qualification ? (hasQualification(["12th", "higher secondary"]) ? "YES" : "NO") : "",
+        "Eligible ITI": eligibility?.qualification ? (hasQualification(["iti"]) ? "YES" : "NO") : "",
+        "Eligible Diploma": eligibility?.qualification ? (hasQualification(["diploma"]) ? "YES" : "NO") : "",
+        "Eligible Graduation": eligibility?.qualification ? (hasQualification(["graduation", "graduate", "degree"]) ? "YES" : "NO") : "",
+        Age: eligibility?.min_age != null || eligibility?.max_age != null
+          ? `${eligibility.min_age ?? ""}${eligibility.max_age != null ? `-${eligibility.max_age}` : "+"}`
+          : "",
+        "Male/ Female": eligibility?.gender ?? "",
+        "Facility Bus": bus?.applicable ? "Yes" : "No",
+        "Facility Canteen": canteen?.applicable ? "Yes" : "No",
+        "Facility Accomodation": accommodation?.applicable ? "Yes" : "No",
+        "Bus Amount": bus?.amount ?? "",
+        "Canteen Amount": canteen?.amount ?? "",
+        "Deduction Per Month": deductions
+          .filter((row) => row.applicable && /month/i.test(row.frequency ?? ""))
+          .reduce((total, row) => total + Number(row.amount ?? 0), 0),
+      };
+    });
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "DMCFS RTSRMP";
+    workbook.created = new Date();
+    workbook.modified = new Date();
+    const filterLabel = [
+      ...(applyCurrentFilters ? [
+        search ? `Search: ${search}` : "",
+        statusFilter !== "ALL" ? `Status: ${statusFilter}` : "",
+        companyFilter !== "ALL" ? `Company: ${getCompanyName(companyFilter)}` : "",
+        locationFilter !== "ALL" ? `Location: ${getLocationName(locationFilter)}` : "",
+        schemeFilter ? `Scheme: ${schemeFilter}` : "",
+        qualificationFilter ? `Qualification: ${qualificationFilter}` : "",
+        effectiveFrom ? `Effective from: ${effectiveFrom}` : "",
+        effectiveTo ? `Effective to: ${effectiveTo}` : "",
+        submissionFrom ? `Submitted from: ${submissionFrom}` : "",
+        submissionTo ? `Submitted to: ${submissionTo}` : "",
+        verificationFrom ? `Verification from: ${verificationFrom}` : "",
+        verificationTo ? `Verification to: ${verificationTo}` : "",
+      ] : ["All companies, locations, and submission statuses; current filters not applied"]),
+    ].filter(Boolean).join(" | ") || "No additional filters";
+    const styleSheet = (
+      worksheet: ExcelJS.Worksheet,
+      headerRow: number,
+      dataStartRow: number,
+      headers: string[],
+    ) => {
+      worksheet.views = [{ state: "frozen", ySplit: dataStartRow - 1 }];
+      worksheet.autoFilter = {
+        from: { row: headerRow, column: 1 },
+        to: { row: Math.max(headerRow, worksheet.rowCount), column: headers.length },
+      };
+      for (let column = 1; column <= headers.length; column += 1) {
+        const columnValues = (worksheet.getColumn(column).values ?? []) as unknown[];
+        const contentWidth = columnValues
+          .slice(dataStartRow)
+          .reduce<number>((max, value) => Math.max(max, String(value ?? "").length), headers[column - 1].length);
+        worksheet.getColumn(column).width = Math.min(40, Math.max(13, contentWidth + 2));
+      }
+      worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        row.eachCell({ includeEmpty: true }, (cell) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFD7DEE8" } },
+            left: { style: "thin", color: { argb: "FFD7DEE8" } },
+            bottom: { style: "thin", color: { argb: "FFD7DEE8" } },
+            right: { style: "thin", color: { argb: "FFD7DEE8" } },
+          };
+          if (rowNumber === headerRow) {
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF17365D" } };
+            cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+            cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+          } else if (rowNumber >= dataStartRow && rowNumber % 2 === 0) {
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F6FA" } };
+          }
+          const header = headers[Number(cell.col) - 1] ?? "";
+          if (rowNumber >= dataStartRow && typeof cell.value === "number" &&
+            /(stipend|bonus|dbt|amount|\brate\b|percentage)/i.test(header)) {
+            cell.numFmt = '#,##0.00;[Red]-#,##0.00;-';
+          }
+        });
+      });
+      worksheet.getRow(headerRow).height = 32;
+    };
+    const addSheet = (name: string, title: string, records: Record<string, unknown>[]) => {
+      const worksheet = workbook.addWorksheet(name.slice(0, 31));
+      const headers = records.length ? Object.keys(records[0]) : ["No records"];
+      const lastColumn = Math.max(1, headers.length);
+      worksheet.mergeCells(1, 1, 1, lastColumn);
+      const titleCell = worksheet.getCell(1, 1);
+      titleCell.value = title;
+      titleCell.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+      titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF17365D" } };
+      titleCell.alignment = { vertical: "middle" };
+      worksheet.getRow(1).height = 28;
+      worksheet.mergeCells(2, 1, 2, lastColumn);
+      worksheet.getCell(2, 1).value = `DMCFS RTSRMP · Generated ${new Date().toLocaleString("en-IN")}`;
+      worksheet.getCell(2, 1).font = { italic: true, color: { argb: "FF475569" } };
+      worksheet.mergeCells(3, 1, 3, lastColumn);
+      worksheet.getCell(3, 1).value = `Filters: ${filterLabel}`;
+      worksheet.getCell(3, 1).alignment = { wrapText: true };
+      worksheet.addRow(headers);
+      if (records.length) {
+        records.forEach((record) => worksheet.addRow(headers.map((header) => record[header] ?? "")));
+      } else {
+        worksheet.addRow(["No records match the selected filters."]);
+      }
+      styleSheet(worksheet, 4, 5, headers);
+      return worksheet;
+    };
+    const addMasterSheet = (records: Record<string, unknown>[]) => {
+      const worksheet = workbook.addWorksheet("Stipend Rate Master");
+      const groupedHeaders = [
+        "Sr.", "Company Name", "Location", "Scheme", "Coordinator", "Conatct No ",
+        "Current Students", "Requirements", "Stipend Amount", "", "", "", "", "",
+        "Attendence Bonus", "DBT", " Eligible Qualification", "", "", "", "",
+        "Age", "Male/ Female", "Facilities", "", "", "Facilities Amount", "", "",
+        "Deduction Per Month",
+      ];
+      const headers = [
+        "Sr.", "Company Name", "Location", "Scheme", "Coordinator", "Conatct No ",
+        "Current Students", "Requirements", "10th", "12th", "ITI", "Diploma",
+        "Graduation BE", "Graduation Non BE", "", "", "10th", "12th", "ITI",
+        "Diploma", "Graduation", "", "", "Bus", "Canteen", "Accomodation",
+        "Bus", "Canteen", "",
+      ];
+      worksheet.addRow(groupedHeaders);
+      worksheet.addRow(headers);
+      records.forEach((record) => worksheet.addRow(Object.values(record)));
+      worksheet.mergeCells("I1:N1");
+      worksheet.mergeCells("O1:O2");
+      worksheet.mergeCells("P1:P2");
+      worksheet.mergeCells("Q1:U1");
+      worksheet.mergeCells("V1:V2");
+      worksheet.mergeCells("W1:W2");
+      worksheet.mergeCells("X1:Z1");
+      worksheet.mergeCells("AA1:AB1");
+      worksheet.mergeCells("AC1:AC2");
+      const groupRow = worksheet.getRow(1);
+      groupRow.height = 28;
+      groupRow.eachCell((cell) => {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF17365D" } };
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+        cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+      });
+      styleSheet(worksheet, 2, 3, headers);
+      for (const column of [9, 10, 11, 12, 13, 14, 15, 16, 27, 28, 29]) {
+        worksheet.getColumn(column).eachCell((cell, rowNumber) => {
+          if (rowNumber >= 3 && typeof cell.value === "number") {
+            cell.numFmt = '#,##0.00;[Red]-#,##0.00;-';
+          }
+        });
+      }
+      worksheet.views = [{ state: "frozen", ySplit: 2 }];
+      worksheet.autoFilter = {
+        from: { row: 2, column: 1 },
+        to: { row: Math.max(2, worksheet.rowCount), column: headers.length },
+      };
+      const explicitWidths = [7, 36, 18, 14, 22, 18, 16, 14, 14, 14, 14, 14, 18, 22, 18, 14, 14, 14, 14, 16, 14, 14, 17, 12, 14, 17, 14, 14, 20];
+      explicitWidths.forEach((width, index) => { worksheet.getColumn(index + 1).width = width; });
+    };
+
+    const summary = [
+      { Metric: "Report", Value: exportName },
+      { Metric: "Generated", Value: new Date().toLocaleString("en-IN") },
+      { Metric: "Selected filters", Value: filterLabel },
+      { Metric: "Records", Value: exportRows.length },
+      { Metric: "Approved records", Value: exportRows.filter((item) => item.status === "APPROVED").length },
+      { Metric: "Pending verification", Value: exportRows.filter((item) => ["SUBMITTED", "UNDER_VERIFICATION"].includes(item.status)).length },
+    ];
+    addSheet("Summary", "RTSRMP Report Summary", summary);
+    addMasterSheet(masterRows);
+    addSheet("Submission Register", "Company HR Submission Register", exportRows.map((item) => ({
+      Company: getCompanyName(item.company_id),
+      Location: getLocationName(item.location_id),
+      "Company HR": getCompanyHRName(item.created_by),
+      Scheme: item.scheme,
+      Qualification: item.qualification,
+      Stipend: item.stipend_rate,
+      Status: item.status,
+      "Created At": item.created_at,
+      "Submitted At": item.submitted_at ?? "",
+      "Submitted By": getCompanyHRName(item.submitted_by ?? item.created_by),
+      "Verified At": item.verified_at ?? "",
+      "Review Remarks": item.review_remarks ?? "",
+    })));
+    addSheet("Company Requirement", "Company Requirement Report", detailRows(data.requirements, (item: RTSRMPRequirement) => ({
+      Company: getCompanyName(exportRows.find((rate) => rate.id === item.submission_id)!.company_id),
+      Location: getLocationName(exportRows.find((rate) => rate.id === item.submission_id)!.location_id),
+      Scheme: item.scheme,
+      Qualification: item.qualification,
+      Trade: item.trade,
+      "Required Trainees": item.requirement_count,
+      "Current Students": item.current_students ?? "",
+      "Preferred Joining Timeline": item.preferred_joining_timeline,
+      Remarks: item.remarks,
+    })));
+    addSheet("OT Extra Time", "Overtime / Extra Time Report", detailRows(data.overtime, (item: RTSRMPOvertime) => ({
+      Company: getCompanyName(exportRows.find((rate) => rate.id === item.submission_id)!.company_id),
+      Location: getLocationName(exportRows.find((rate) => rate.id === item.submission_id)!.location_id),
+      Applicable: item.applicable ? "Yes" : "No",
+      "OT Rate": item.ot_rate ?? "",
+      "Calculation Basis": item.calculation_basis,
+      Unit: item.rate_unit,
+      "Maximum Hours": item.maximum_hours ?? "",
+      Remarks: item.remarks,
+    })));
+    addSheet("Benefits", "Benefits Report", detailRows(data.benefits, (item: RTSRMPBenefit) => ({
+      Company: getCompanyName(exportRows.find((rate) => rate.id === item.submission_id)!.company_id),
+      Location: getLocationName(exportRows.find((rate) => rate.id === item.submission_id)!.location_id),
+      Benefit: item.benefit_type,
+      Applicable: item.applicable ? "Yes" : "No",
+      Value: item.value,
+      Amount: item.amount ?? "",
+      Frequency: item.frequency,
+      Remarks: item.remarks,
+    })));
+    addSheet("Deductions", "Deductions Report", detailRows(data.deductions, (item: RTSRMPDeduction) => ({
+      Company: getCompanyName(exportRows.find((rate) => rate.id === item.submission_id)!.company_id),
+      Location: getLocationName(exportRows.find((rate) => rate.id === item.submission_id)!.location_id),
+      Type: item.deduction_type,
+      Applicable: item.applicable ? "Yes" : "No",
+      Amount: item.amount ?? "",
+      Percentage: item.percentage ?? "",
+      Frequency: item.frequency,
+      Reason: item.reason,
+      Remarks: item.remarks,
+    })));
+    addSheet("Eligibility", "Eligibility Report", detailRows(data.eligibility, (item) => ({
+      Company: getCompanyName(exportRows.find((rate) => rate.id === item.submission_id)!.company_id),
+      Location: getLocationName(exportRows.find((rate) => rate.id === item.submission_id)!.location_id),
+      "Minimum Age": item.min_age ?? "",
+      "Maximum Age": item.max_age ?? "",
+      Education: item.education,
+      Qualification: item.qualification,
+      Trade: item.trade,
+      Experience: item.experience,
+      Gender: item.gender,
+      "Other Criteria": JSON.stringify(item.other_criteria ?? {}),
+      Remarks: item.remarks,
+    })));
+    addSheet("Supporting Documents", "Supporting Documents Report", detailRows(data.documents, (item) => ({
+      Company: getCompanyName(item.company_id),
+      Location: getLocationName(item.location_id),
+      Type: item.document_type,
+      File: item.file_name,
+      "Content Type": item.content_type ?? "",
+      "File Size": item.file_size ?? "",
+      Uploaded: item.created_at,
+    })));
+    addSheet("Verification", "Verification Report", detailRows(data.verificationLogs, (item) => ({
+      Company: getCompanyName(exportRows.find((rate) => rate.id === item.submission_id)!.company_id),
+      Location: getLocationName(exportRows.find((rate) => rate.id === item.submission_id)!.location_id),
+      Action: item.action,
+      Verifier: item.verifier_id,
+      Timestamp: item.created_at,
+      Remarks: item.remarks ?? "",
+    })));
+    addSheet("Rate History", "Rate History Report", data.history
+      .filter((item: RTSRMPHistory) => exportRows.some((rate) => rate.id === item.submission_id))
+      .map((item: RTSRMPHistory) => ({
+        Company: getCompanyName(item.company_id),
+        Location: getLocationName(item.location_id),
+        Scheme: item.scheme,
+        Qualification: item.qualification,
+        Trade: item.trade ?? "",
+        Rate: currency(item.stipend_rate, item.currency),
+        "Effective From": item.effective_from,
+        "Effective To": item.effective_to ?? "",
+        Status: item.status,
+        "Approved By": item.approved_by,
+        "Approval Date": item.approved_at,
+        "Change Reason": item.change_reason ?? "",
+      })));
+    addSheet("Pending Submissions", "Pending Submissions Report", exportRows
+      .filter((item) => ["SUBMITTED", "UNDER_VERIFICATION"].includes(item.status))
+      .map((item) => ({
+        Company: getCompanyName(item.company_id),
+        Location: getLocationName(item.location_id),
+        Scheme: item.scheme,
+        Qualification: item.qualification,
+        Stipend: item.stipend_rate,
+        "Submitted At": item.submitted_at ?? "",
+        "Company HR": getCompanyHRName(item.created_by),
+        Status: item.status,
+      })));
+    const expiryLimit = new Date();
+    expiryLimit.setDate(expiryLimit.getDate() + 90);
+    const expiryThreshold = expiryLimit.toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    addSheet("Expiring Rates", "Expiring Rates Report", exportRows
+      .filter((item) => item.status === "APPROVED" && item.effective_to && item.effective_to >= today && item.effective_to <= expiryThreshold)
+      .map((item) => ({
+        Company: getCompanyName(item.company_id),
+        Location: getLocationName(item.location_id),
+        Scheme: item.scheme,
+        Qualification: item.qualification,
+        Stipend: item.stipend_rate,
+        "Effective To": item.effective_to ?? "",
+        "Company HR": getCompanyHRName(item.created_by),
+      })));
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `RTSRMP-${exportName.replace(/[^a-z0-9]+/gi, "-")}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const openDocument = async (path: string) => {
+    try {
+      const url = await createDocumentUrl(path);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (cause) {
+      setError(safeErrorMessage(cause));
+    }
+  };
+
+  const pageTitle = routeSections.find(([key]) => key === section)?.[1] ?? "Dashboard";
+  const filterSummary = [
+    search ? `Search: ${search}` : "",
+    statusFilter !== "ALL" ? `Status: ${statusFilter}` : "",
+    companyFilter !== "ALL" ? `Company: ${getCompanyName(companyFilter)}` : "",
+    locationFilter !== "ALL" ? `Location: ${getLocationName(locationFilter)}` : "",
+    schemeFilter ? `Scheme: ${schemeFilter}` : "",
+    qualificationFilter ? `Qualification: ${qualificationFilter}` : "",
+    effectiveFrom ? `Effective from: ${effectiveFrom}` : "",
+    effectiveTo ? `Effective to: ${effectiveTo}` : "",
+    submissionFrom ? `Submitted from: ${submissionFrom}` : "",
+    submissionTo ? `Submitted to: ${submissionTo}` : "",
+    verificationFrom ? `Verification from: ${verificationFrom}` : "",
+    verificationTo ? `Verification to: ${verificationTo}` : "",
+  ].filter(Boolean).join(" | ") || "All authorized records";
+
+  if (loading) return <LoadingPanel pageTitle={pageTitle} isAdmin={isAdmin} />;
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <aside className="rtsrmp-sidebar fixed inset-y-0 left-0 z-30 hidden w-72 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 lg:flex">
+        <div className="border-b border-slate-200 px-6 py-5 dark:border-slate-800">
+          <DMCFSLogo variant="full" size="sm" className="max-w-[165px]" />
+          <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.2em] text-orange-600">RTSRMP Workspace</p>
+          <h1 className="mt-1 text-sm font-semibold">Stipend Rate Management</h1>
+        </div>
+        <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label="RTSRMP navigation">
+          {routeSections.filter(([key]) => isAdmin || !adminOnlySections.includes(key)).map(([key, label, path]) => (
+            <Link
+              key={key}
+              to={path}
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                section === key
+                  ? "bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300"
+                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              }`}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+              {label}
+            </Link>
+          ))}
+        </nav>
+        <div className="border-t border-slate-200 p-4 dark:border-slate-800">
+          <p className="truncate text-sm font-semibold">{profile.name || profile.email || "Authenticated user"}</p>
+          <p className="mt-1 text-xs text-slate-500">{profile.role.replaceAll("_", " ")}</p>
+          {isAdmin && <Link to="/app-select" className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-orange-700 hover:underline dark:text-orange-300">
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to applications
+          </Link>}
+        </div>
+      </aside>
+
+      <div className="lg:pl-72">
+        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.17em] text-orange-600">RTSRMP</p>
+              <h2 className="mt-0.5 text-lg font-semibold">{pageTitle}</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="hidden rounded-lg bg-slate-100 px-3 py-2 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300 sm:inline">
+                {isCompanyHR
+                  ? `${currentCompany?.company_name ?? "Assigned company"} · ${currentLocation?.location_name ?? "Assigned location"}`
+                  : "All companies"}
+              </span>
+              <button
+                type="button"
+                onClick={() => void refresh()}
+                disabled={loading}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
+              {isCompanyHR && (
+                <button
+                  type="button"
+                  onClick={openNewDraft}
+                  disabled={!currentCompany || !currentLocation}
+                  className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-3 py-2 text-sm font-semibold text-white hover:bg-orange-700"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span className="hidden sm:inline">New submission</span>
+                </button>
+              )}
+            </div>
+          </div>
+          <nav className="mt-3 flex gap-2 overflow-x-auto pb-1 lg:hidden" aria-label="RTSRMP sections">
+            {routeSections.filter(([key]) => isAdmin || !adminOnlySections.includes(key)).map(([key, label, path]) => (
+              <Link key={key} to={path} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold ${section === key ? "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}>
+                {label}
+              </Link>
+            ))}
+          </nav>
+        </header>
+
+        <main className="mx-auto max-w-[1600px] space-y-6 p-4 sm:p-6 lg:p-8">
+          {error && (
+            <div role="alert" className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">
+              <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{error}</span>
+              <button type="button" aria-label="Dismiss error" className="ml-auto" onClick={() => setError("")}><X className="h-4 w-4" /></button>
+            </div>
+          )}
+          {submittedSummary && (
+            <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+              <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+                <div className="flex items-center gap-3 text-emerald-600">
+                  <CheckCircle2 className="h-8 w-8" />
+                  <h3 className="text-lg font-bold">Data filled and submitted successfully</h3>
+                </div>
+                <ul className="mt-4 space-y-1 text-sm text-slate-700 dark:text-slate-200">
+                  {submittedSummary.map((line) => <li key={line}>{line}</li>)}
+                </ul>
+                <button type="button" onClick={() => setSubmittedSummary(null)} className="mt-5 w-full rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700">OK</button>
+              </div>
+            </div>
+          )}
+          {successMessage && (
+            <div role="status" className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+              <CheckCircle2 className="h-4 w-4" />{successMessage}
+            </div>
+          )}
+          {!loading && !data && (
+            <EmptyPanel title="RTSRMP data is unavailable" message="Check your connection and RTSRMP database configuration, then retry." onRetry={() => void refresh()} />
+          )}
+          {!loading && data && !isAdmin && adminOnlySections.includes(section) && (
+            <EmptyInline message="This section is available to RTSRMP administrators only." />
+          )}
+          {!loading && data && section === "dashboard" && (
+            <Dashboard
+              data={data}
+              isAdmin={isAdmin}
+              companyName={currentCompany?.company_name ?? ""}
+              locationName={currentLocation?.location_name ?? ""}
+              onOpen={(path) => navigate(path)}
+            />
+          )}
+          {!loading && data && section === "companies" && isAdmin && (
+            <CompanyMaster data={data} />
+          )}
+          {!loading && data && section === "pending" && isAdmin && (
+            <PendingTracking data={data} getCompanyName={getCompanyName} getLocationName={getLocationName} getCompanyHRName={getCompanyHRName} onOpen={(submission) => setReviewTarget(submission)} />
+          )}
+          {!loading && data && section === "history" && (
+            <HistoryTable data={data.history} getCompanyName={getCompanyName} getLocationName={getLocationName} />
+          )}
+          {!loading && data && section === "documents" && (
+            <DocumentsTable data={data.documents} getCompanyName={getCompanyName} getLocationName={getLocationName} onOpen={openDocument} />
+          )}
+          {!loading && data && section === "comparison" && isAdmin && (
+            <ComparisonTable submissions={filteredSubmissions} data={data} getCompanyName={getCompanyName} getLocationName={getLocationName} />
+          )}
+          {!loading && data && section === "reports" && (
+            <section className="space-y-5">
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <div>
+                  <h3 className="text-xl font-semibold">RTSRMP reports</h3>
+                  <p className="mt-1 text-sm text-slate-500">Exports use the authorized records and current filters below.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <select aria-label="Report type" value={reportType} onChange={(event) => setReportType(event.target.value)} className="rtsrmp-input">
+                    {RTSRMP_REPORT_TYPES.map((type) => <option key={type}>{type}</option>)}
+                  </select>
+                  <button type="button" disabled={!reportRows.length} onClick={() => void exportWorkbook().catch((cause) => setError(safeErrorMessage(cause)))} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">
+                    <FileSpreadsheet className="h-4 w-4" /> Export Excel
+                  </button>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      disabled={!scopedSubmissions.length}
+                      onClick={() => void exportWorkbook(scopedSubmissions, "All Companies Data", false).catch((cause) => setError(safeErrorMessage(cause)))}
+                      className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 px-4 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+                    >
+                      <FileSpreadsheet className="h-4 w-4" /> Download all companies
+                    </button>
+                  )}
+                  <button type="button" disabled={!reportRows.length} onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800">
+                    <Printer className="h-4 w-4" /> Print report
+                  </button>
+                </div>
+              </div>
+              <FilterPanel
+                isAdmin={isAdmin}
+                data={data}
+                search={search}
+                setSearch={setSearch}
+                statusFilter={statusFilter}
+                setStatusFilter={setStatusFilter}
+                companyFilter={companyFilter}
+                setCompanyFilter={setCompanyFilter}
+                locationFilter={locationFilter}
+                setLocationFilter={setLocationFilter}
+                schemeFilter={schemeFilter}
+                setSchemeFilter={setSchemeFilter}
+                qualificationFilter={qualificationFilter}
+                setQualificationFilter={setQualificationFilter}
+                effectiveFrom={effectiveFrom}
+                setEffectiveFrom={setEffectiveFrom}
+                effectiveTo={effectiveTo}
+                setEffectiveTo={setEffectiveTo}
+                submissionFrom={submissionFrom}
+                setSubmissionFrom={setSubmissionFrom}
+                submissionTo={submissionTo}
+                setSubmissionTo={setSubmissionTo}
+                verificationFrom={verificationFrom}
+                setVerificationFrom={setVerificationFrom}
+                verificationTo={verificationTo}
+                setVerificationTo={setVerificationTo}
+                onReset={resetFilters}
+                showAllFilters
+              />
+              <p className="text-sm text-slate-500">{reportRows.length} authorized record(s) in this report.</p>
+              <PrintReport reportType={reportType} rows={reportRows} data={data} filters={filterSummary} getCompanyName={getCompanyName} getLocationName={getLocationName} getCompanyHRName={getCompanyHRName} profileName={profile.name || profile.email || profile.role} />
+            </section>
+          )}
+          {!loading && data && !adminOnlySections.includes(section) && !["dashboard", "history", "documents", "reports"].includes(section) && (
+            <>
+              <section className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+                <div>
+                  <h3 className="text-xl font-semibold">
+                    {isAdmin && section === "stipend-rates" ? "All Company HR Submissions" : pageTitle}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {isCompanyHR ? "Company and location are assigned from your authenticated profile." : "Search, filter, sort and review live RTSRMP records."}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  {isAdmin && <button type="button" onClick={() => void refresh()} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold dark:border-slate-700"><RefreshCw className="h-4 w-4" /> Sync live master data</button>}
+                  {isCompanyHR && <button type="button" disabled={!currentCompany || !currentLocation} onClick={openNewDraft} className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"><Plus className="h-4 w-4" /> New submission</button>}
+                  {["stipend-rates", "verification"].includes(section) && <>
+                    <button type="button" disabled={!reportRows.length} onClick={() => void exportWorkbook().catch((cause) => setError(safeErrorMessage(cause)))} className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 px-3 py-2 text-sm font-semibold text-emerald-800 disabled:opacity-50 dark:border-emerald-800 dark:text-emerald-300"><FileSpreadsheet className="h-4 w-4" /> Export Excel</button>
+                    <button type="button" disabled={!visibleRates.length} onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold disabled:opacity-50 dark:border-slate-700"><Printer className="h-4 w-4" /> Print</button>
+                  </>}
+                </div>
+              </section>
+              <FilterPanel
+                isAdmin={isAdmin}
+                data={data}
+                search={search}
+                setSearch={setSearch}
+                statusFilter={statusFilter}
+                setStatusFilter={setStatusFilter}
+                companyFilter={companyFilter}
+                setCompanyFilter={setCompanyFilter}
+                locationFilter={locationFilter}
+                setLocationFilter={setLocationFilter}
+                schemeFilter={schemeFilter}
+                setSchemeFilter={setSchemeFilter}
+                qualificationFilter={qualificationFilter}
+                setQualificationFilter={setQualificationFilter}
+                effectiveFrom={effectiveFrom}
+                setEffectiveFrom={setEffectiveFrom}
+                effectiveTo={effectiveTo}
+                setEffectiveTo={setEffectiveTo}
+                submissionFrom={submissionFrom}
+                setSubmissionFrom={setSubmissionFrom}
+                submissionTo={submissionTo}
+                setSubmissionTo={setSubmissionTo}
+                verificationFrom={verificationFrom}
+                setVerificationFrom={setVerificationFrom}
+                verificationTo={verificationTo}
+                setVerificationTo={setVerificationTo}
+                onReset={resetFilters}
+              />
+              <SubmissionTable
+                rows={pageRows}
+                allCount={visibleRates.length}
+                page={page}
+                pageCount={pageCount}
+                sortBy={sortBy}
+                sortAscending={sortAscending}
+                onSort={(key) => {
+                  if (sortBy === key) setSortAscending(!sortAscending);
+                  else { setSortBy(key); setSortAscending(true); }
+                }}
+                getCompanyName={getCompanyName}
+                getLocationName={getLocationName}
+                getCompanyHRName={getCompanyHRName}
+                isAdmin={isAdmin}
+                isCompanyHR={isCompanyHR}
+                documents={data.documents}
+                onEdit={openEditDraft}
+                onReview={(submission) => { setReviewTarget(submission); setReviewRemarks(""); }}
+                onPage={setPage}
+                onDocument={openDocument}
+              />
+              {["stipend-rates", "verification"].includes(section) && (
+                <PrintReport reportType={pageTitle} rows={visibleRates} data={data} filters={filterSummary} getCompanyName={getCompanyName} getLocationName={getLocationName} getCompanyHRName={getCompanyHRName} profileName={profile.name || profile.email || profile.role} />
+              )}
+            </>
+          )}
+        </main>
+      </div>
+
+      {form && data && (
+        <SubmissionForm
+          form={form}
+          error={error}
+          successMessage={successMessage}
+          setForm={setForm}
+          data={data}
+          profile={profile}
+          isSaving={saving}
+          isUploading={uploading}
+          uploadType={uploadType}
+          setUploadType={setUploadType}
+          onClose={() => { setForm(null); setError(""); }}
+          onSave={() => void handleSave(false)}
+          onSubmit={() => void handleSave(true)}
+          onUpload={(file) => void handleUpload(file)}
+          getCompanyName={getCompanyName}
+          getLocationName={getLocationName}
+          onDocument={openDocument}
+        />
+      )}
+      {reviewTarget && data && (
+        <ReviewDialog
+          submission={reviewTarget}
+          data={data}
+          error={error}
+          successMessage={successMessage}
+          remarks={reviewRemarks}
+          setRemarks={setReviewRemarks}
+          isSaving={saving}
+          getCompanyName={getCompanyName}
+          getLocationName={getLocationName}
+          onClose={() => { setReviewTarget(null); setError(""); }}
+          onReview={handleReview}
+          onDocument={openDocument}
+        />
+      )}
+    </div>
+  );
+}
+
+function parseJsonObject(value: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function fitsDecimal(value: string, scale: number, maximum: number): boolean {
+  const normalized = value.trim();
+  if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(normalized)) return false;
+  const decimals = normalized.split(".")[1] ?? "";
+  const numericValue = Number(normalized);
+  return decimals.length <= scale && Number.isFinite(numericValue) && numericValue <= maximum;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function LoadingPanel({ pageTitle, isAdmin }: { pageTitle: string; isAdmin: boolean }) {
+  const navRows = isAdmin ? 14 : 10;
+
+  return (
+    <div
+      className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100"
+      role="status"
+      aria-busy="true"
+      aria-label={`Loading ${pageTitle}`}
+    >
+      <span className="sr-only">Loading {pageTitle}…</span>
+      <aside
+        aria-hidden="true"
+        className="rtsrmp-sidebar fixed inset-y-0 left-0 z-30 hidden w-72 flex-col border-r border-slate-200 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900 lg:flex"
+      >
+        <div className="space-y-4 border-b border-slate-200 pb-5 dark:border-slate-800">
+          <div className="shimmer h-8 w-40 rounded-md bg-slate-200 dark:bg-slate-700" />
+          <div className="shimmer h-3 w-28 rounded bg-slate-200 dark:bg-slate-700" />
+          <div className="shimmer h-4 w-44 rounded bg-slate-200 dark:bg-slate-700" />
+        </div>
+        <nav className="flex-1 space-y-3 overflow-hidden py-5">
+          {Array.from({ length: navRows }, (_, index) => (
+            <div
+              key={index}
+              className={`shimmer h-10 rounded-xl bg-slate-100 dark:bg-slate-800 ${index === 0 ? "w-full" : "w-11/12"}`}
+            />
+          ))}
+        </nav>
+        <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+          <div className="shimmer h-4 w-32 rounded bg-slate-200 dark:bg-slate-700" />
+          <div className="shimmer h-3 w-24 rounded bg-slate-200 dark:bg-slate-700" />
+        </div>
+      </aside>
+
+      <div className="lg:pl-72">
+        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-2">
+              <div className="shimmer h-3 w-16 rounded bg-slate-200 dark:bg-slate-700" />
+              <div className="shimmer h-6 w-40 rounded bg-slate-200 dark:bg-slate-700" />
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="shimmer hidden h-9 w-40 rounded-lg bg-slate-200 dark:bg-slate-700 sm:block" />
+              <div className="shimmer h-9 w-20 rounded-lg bg-slate-200 dark:bg-slate-700" />
+              <div className="shimmer hidden h-9 w-36 rounded-lg bg-slate-200 dark:bg-slate-700 sm:block" />
+            </div>
+          </div>
+          <nav aria-hidden="true" className="mt-3 flex gap-2 overflow-hidden pb-1 lg:hidden">
+            {Array.from({ length: 5 }, (_, index) => (
+              <div key={index} className="shimmer h-7 w-24 shrink-0 rounded-full bg-slate-200 dark:bg-slate-700" />
+            ))}
+          </nav>
+        </header>
+
+        <main className="mx-auto max-w-[1600px] space-y-6 p-4 sm:p-6 lg:p-8">
+          <section aria-hidden="true" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div key={index} className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+                <div className="shimmer h-3 w-28 rounded bg-slate-200 dark:bg-slate-700" />
+                <div className="shimmer mt-4 h-8 w-20 rounded bg-slate-200 dark:bg-slate-700" />
+                <div className="shimmer mt-3 h-3 w-36 rounded bg-slate-100 dark:bg-slate-800" />
+              </div>
+            ))}
+          </section>
+
+          <section aria-hidden="true" className="grid gap-5 xl:grid-cols-2">
+            {Array.from({ length: 2 }, (_, index) => (
+              <div key={index} className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+                <div className="shimmer h-5 w-36 rounded bg-slate-200 dark:bg-slate-700" />
+                <div className="mt-6 flex h-36 items-end gap-3">
+                  {[48, 72, 56, 88, 64, 76, 44, 68].map((height, barIndex) => (
+                    <div
+                      key={barIndex}
+                      className="shimmer flex-1 rounded-t-md bg-slate-100 dark:bg-slate-800"
+                      style={{ height: `${height}%` }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </section>
+
+          <section aria-hidden="true" className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-200 p-5 dark:border-slate-800">
+              <div className="shimmer h-5 w-40 rounded bg-slate-200 dark:bg-slate-700" />
+              <div className="shimmer h-9 w-28 rounded-lg bg-slate-100 dark:bg-slate-800" />
+            </div>
+            <div className="space-y-4 p-5">
+              {Array.from({ length: 5 }, (_, rowIndex) => (
+                <div key={rowIndex} className="grid grid-cols-3 gap-4 sm:grid-cols-5">
+                  {Array.from({ length: 5 }, (_, columnIndex) => (
+                    <div
+                      key={columnIndex}
+                      className={`shimmer h-4 rounded bg-slate-100 dark:bg-slate-800 ${columnIndex > 2 ? "hidden sm:block" : ""}`}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function EmptyPanel({ title, message, onRetry }: { title: string; message: string; onRetry: () => void }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center dark:border-slate-700 dark:bg-slate-900">
+      <CircleAlert className="mx-auto h-8 w-8 text-slate-400" />
+      <h3 className="mt-3 font-semibold">{title}</h3>
+      <p className="mx-auto mt-2 max-w-lg text-sm text-slate-500">{message}</p>
+      <button type="button" onClick={onRetry} className="mt-5 rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white">Retry</button>
+    </div>
+  );
+}
+
+function Dashboard({
+  data,
+  isAdmin,
+  companyName,
+  locationName,
+  onOpen,
+}: {
+  data: RTSRMPData;
+  isAdmin: boolean;
+  companyName: string;
+  locationName: string;
+  onOpen: (path: string) => void;
+}) {
+  const rows = data.submissions;
+  const today = new Date().toISOString().slice(0, 10);
+  const soon = new Date();
+  soon.setDate(soon.getDate() + 90);
+  const expiring = rows.filter((item) => item.status === "APPROVED" && item.effective_to && item.effective_to >= today && item.effective_to <= soon.toISOString().slice(0, 10));
+  const underReview = rows.filter((item) => item.status === "UNDER_VERIFICATION");
+  const submitted = rows.filter((item) => item.status === "SUBMITTED");
+  const approved = rows.filter((item) => item.status === "APPROVED");
+  const rejected = rows.filter((item) => item.status === "REJECTED");
+  const corrections = rows.filter((item) => item.status === "CORRECTION_REQUIRED");
+  const pendingCompanies = data.companies.filter((company) => !rows.some((item) => item.company_id === company.company_id && item.status !== "DRAFT"));
+  const metrics = isAdmin
+    ? [
+        ["Total Companies", data.companies.length, Building2],
+        ["Submitted", submitted.length, FileCheck2],
+        ["Under Verification", underReview.length, ShieldCheck],
+        ["Approved Rates", approved.length, BadgeCheck],
+        ["Rejected", rejected.length, CircleAlert],
+        ["Correction Required", corrections.length, RefreshCw],
+        ["Expiring in 90 days", expiring.length, CalendarClock],
+        ["Active Locations", data.locations.filter((item) => item.status === "ACTIVE").length, MapPin],
+        ["Total Submissions", rows.length, FileText],
+      ] as const
+    : [
+        ["My Submissions", rows.length, FileText],
+        ["Approved Rates", approved.length, BadgeCheck],
+        ["Pending Corrections", corrections.length, CircleAlert],
+        ["Upcoming Expiry", expiring.length, CalendarClock],
+      ] as const;
+  const actions = [
+    ["Stipend Rate Master", "/rtsrmp/stipend-rates", "Review submitted rates and their current status."],
+    ["Verification Queue", "/rtsrmp/verification", "Review submitted records and record a decision."],
+    ["Reports", "/rtsrmp/reports", "Export or print filtered RTSRMP reports."],
+    ["Rate History", "/rtsrmp/history", "Inspect approved rate snapshots over time."],
+  ];
+  const lastSubmission = [...rows].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+
+  return (
+    <div className="space-y-6">
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-orange-950 p-6 text-white shadow-xl sm:p-9">
+        <div className="relative z-10 max-w-3xl">
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-orange-300">Real-time stipend governance</p>
+          <h2 className="mt-3 text-2xl font-semibold sm:text-3xl">{isAdmin ? "Stipend Rate Management Process" : "Company HR Workspace"}</h2>
+          {isAdmin ? (
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">Review company-submitted rates, record verification decisions and preserve an auditable master of approved rates.</p>
+          ) : (
+            <div className="mt-4 flex flex-wrap gap-x-8 gap-y-2 text-sm text-slate-200">
+              <span><span className="text-slate-400">Company:</span> {companyName || "Not assigned"}</span>
+              <span><span className="text-slate-400">Location:</span> {locationName || "Not assigned"}</span>
+            </div>
+          )}
+        </div>
+        <div className="pointer-events-none absolute -right-8 -top-12 h-64 w-64 rounded-full border-[28px] border-white/5" />
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {metrics.map(([label, value, Icon]) => (
+          <article key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-slate-500">{label}</p>
+              <span className="rounded-xl bg-orange-50 p-2 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300"><Icon className="h-5 w-5" /></span>
+            </div>
+            <p className="mt-4 text-3xl font-semibold tracking-tight">{value}</p>
+          </article>
+        ))}
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="font-semibold">Recent submissions</h3>
+              <p className="mt-1 text-xs text-slate-500">Actual RTSRMP records</p>
+            </div>
+            <button type="button" onClick={() => onOpen("/rtsrmp/stipend-rates")} className="text-sm font-semibold text-orange-700 hover:underline dark:text-orange-300">View all</button>
+          </div>
+          {rows.length ? (
+            <div className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
+              {[...rows].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 5).map((item) => (
+                <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                  <div>
+                    <p className="text-sm font-semibold">{item.scheme} · {item.qualification}</p>
+                    <p className="mt-1 text-xs text-slate-500">{data.companies.find((company) => company.company_id === item.company_id)?.company_name ?? "Company"} · {data.locations.find((location) => location.location_id === item.location_id)?.location_name ?? "Location"}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold">{currency(item.stipend_rate, item.currency)}</span>
+                    <StatusPill status={item.status} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : <EmptyInline message="No RTSRMP submissions are available for this account." />}
+          {lastSubmission && <p className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-800">Last submission: {displayDate(lastSubmission.created_at)}</p>}
+        </div>
+
+        <div className="space-y-5">
+          {isAdmin && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950/30">
+              <div className="flex items-start gap-3">
+                <Users className="mt-0.5 h-5 w-5 text-amber-700 dark:text-amber-300" />
+                <div>
+                  <p className="font-semibold text-amber-900 dark:text-amber-100">Companies with no submitted rates</p>
+                  <p className="mt-1 text-sm text-amber-800 dark:text-amber-200">{pendingCompanies.length} companies</p>
+                  <p className="mt-2 text-xs leading-5 text-amber-800/80 dark:text-amber-200/80">Based on real company and submission records. Drafts are not treated as submissions.</p>
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+            <h3 className="font-semibold">Quick actions</h3>
+            <div className="mt-3 space-y-2">
+              {actions.filter(([, path]) => isAdmin || path !== "/rtsrmp/verification").map(([label, path, description]) => (
+                <button key={path} type="button" onClick={() => onOpen(path)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-100 p-3 text-left hover:border-orange-200 hover:bg-orange-50/50 dark:border-slate-800 dark:hover:border-orange-900 dark:hover:bg-orange-950/20">
+                  <span><span className="block text-sm font-semibold">{label}</span><span className="mt-1 block text-xs text-slate-500">{description}</span></span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-slate-400" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function EmptyInline({ message }: { message: string }) {
+  return <p className="py-10 text-center text-sm text-slate-500">{message}</p>;
+}
+
+function CompanyMaster({ data }: { data: RTSRMPData }) {
+  return (
+    <section className="space-y-5">
+      <div>
+        <h3 className="text-xl font-semibold">Company and location master</h3>
+        <p className="mt-1 text-sm text-slate-500">Live company and location references mirrored from the existing master data; RTSRMP does not modify those records.</p>
+      </div>
+      {!data.companies.length ? <EmptyInline message="No company records were returned from the live master data." /> : (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {data.companies.map((company) => {
+            const locations = data.locations.filter((location) => location.company_id === company.company_id);
+            return (
+              <article key={company.company_id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h4 className="font-semibold">{company.company_name}</h4>
+                    <p className="mt-1 text-xs text-slate-500">{company.company_code || "No company code"} · {company.status}</p>
+                  </div>
+                  <Building2 className="h-5 w-5 text-orange-600" />
+                </div>
+                <div className="mt-4 space-y-2">
+                  {locations.map((location) => <div key={location.location_id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800"><span>{location.location_name}</span><span className="text-xs text-slate-500">{[location.city, location.state].filter(Boolean).join(", ") || location.status}</span></div>)}
+                  {!locations.length && <p className="text-sm text-slate-500">No active location references.</p>}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PendingTracking({
+  data,
+  getCompanyName,
+  getLocationName,
+  getCompanyHRName,
+  onOpen,
+}: {
+  data: RTSRMPData;
+  getCompanyName: (id: string) => string;
+  getLocationName: (id: string) => string;
+  getCompanyHRName: (profileId: string | null) => string;
+  onOpen: (submission: RTSRMPSubmission) => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const expiryLimit = new Date();
+  expiryLimit.setDate(expiryLimit.getDate() + 90);
+  const expiring = data.submissions.filter((item) => item.status === "APPROVED" && item.effective_to && item.effective_to >= today && item.effective_to <= expiryLimit.toISOString().slice(0, 10));
+  const expired = data.submissions.filter((item) => item.status === "APPROVED" && item.effective_to && item.effective_to < today);
+  const tracked = [...expired, ...expiring, ...data.submissions.filter((item) => ["CORRECTION_REQUIRED", "UNDER_VERIFICATION", "SUBMITTED"].includes(item.status))];
+  const missing = data.locations.filter((location) => !data.submissions.some((item) => item.location_id === location.location_id && item.status !== "DRAFT"));
+  const noCompanySubmission = data.companies.filter((company) => !data.submissions.some((item) => item.company_id === company.company_id && item.status !== "DRAFT"));
+  return (
+    <div className="space-y-5">
+      <div><h3 className="text-xl font-semibold">Pending and expiring coverage</h3><p className="mt-1 text-sm text-slate-500">Calculated from real RTSRMP rates and current company/location masters.</p></div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[["Companies with no submission", noCompanySubmission.length], ["Locations with no submission", missing.length], ["Expired approved rates", expired.length], ["Rates expiring in 90 days", expiring.length]].map(([label, value]) => <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><p className="text-sm text-slate-500">{label}</p><p className="mt-3 text-3xl font-semibold">{value}</p></div>)}
+      </div>
+      <div className="grid gap-5 xl:grid-cols-2">
+        <TrackingList title="Companies without submitted rates" entries={noCompanySubmission.map((item) => ({ primary: item.company_name, secondary: item.status }))} />
+        <TrackingList title="Locations missing submissions" entries={missing.map((item) => ({ primary: item.location_name, secondary: getCompanyName(item.company_id) }))} />
+      </div>
+      <SubmissionTable
+        rows={tracked}
+        allCount={tracked.length}
+        page={1}
+        pageCount={1}
+        sortBy="effective_to"
+        sortAscending
+        getCompanyName={getCompanyName}
+        getLocationName={getLocationName}
+        getCompanyHRName={getCompanyHRName}
+        isAdmin
+        onReview={onOpen}
+      />
+    </div>
+  );
+}
+
+function TrackingList({ title, entries }: { title: string; entries: { primary: string; secondary: string }[] }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+      <h4 className="font-semibold">{title}</h4>
+      {entries.length ? <div className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">{entries.slice(0, 15).map((entry, index) => <div key={`${entry.primary}-${index}`} className="flex justify-between gap-3 py-2 text-sm"><span>{entry.primary}</span><span className="text-xs text-slate-500">{entry.secondary}</span></div>)}</div> : <EmptyInline message="No missing records." />}
+    </div>
+  );
+}
+
+function FilterPanel({
+  isAdmin,
+  data,
+  search,
+  setSearch,
+  statusFilter,
+  setStatusFilter,
+  companyFilter,
+  setCompanyFilter,
+  locationFilter,
+  setLocationFilter,
+  schemeFilter,
+  setSchemeFilter,
+  qualificationFilter,
+  setQualificationFilter,
+  effectiveFrom,
+  setEffectiveFrom,
+  effectiveTo,
+  setEffectiveTo,
+  submissionFrom,
+  setSubmissionFrom,
+  submissionTo,
+  setSubmissionTo,
+  verificationFrom,
+  setVerificationFrom,
+  verificationTo,
+  setVerificationTo,
+  onReset,
+  showAllFilters = false,
+}: {
+  isAdmin: boolean;
+  data: RTSRMPData;
+  search: string;
+  setSearch: (value: string) => void;
+  statusFilter: string;
+  setStatusFilter: (value: string) => void;
+  companyFilter: string;
+  setCompanyFilter: (value: string) => void;
+  locationFilter: string;
+  setLocationFilter: (value: string) => void;
+  schemeFilter: string;
+  setSchemeFilter: (value: string) => void;
+  qualificationFilter: string;
+  setQualificationFilter: (value: string) => void;
+  effectiveFrom: string;
+  setEffectiveFrom: (value: string) => void;
+  effectiveTo: string;
+  setEffectiveTo: (value: string) => void;
+  submissionFrom: string;
+  setSubmissionFrom: (value: string) => void;
+  submissionTo: string;
+  setSubmissionTo: (value: string) => void;
+  verificationFrom: string;
+  setVerificationFrom: (value: string) => void;
+  verificationTo: string;
+  setVerificationTo: (value: string) => void;
+  onReset: () => void;
+  showAllFilters?: boolean;
+}) {
+  const locations = companyFilter === "ALL" ? data.locations : data.locations.filter((location) => location.company_id === companyFilter);
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-semibold"><Filter className="h-4 w-4 text-orange-600" /> Search and filters</div>
+        <button type="button" onClick={onReset} className="text-xs font-semibold text-orange-700 hover:underline dark:text-orange-300">Reset</button>
+      </div>
+      <div className={`grid gap-3 sm:grid-cols-2 ${isAdmin ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
+        <label className="relative"><span className="sr-only">Search</span><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className="rtsrmp-input pl-9" placeholder="Search company, scheme, trade…" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+        <label><span className="sr-only">Status</span><select className="rtsrmp-input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="ALL">All statuses</option>{["DRAFT", "SUBMITTED", "UNDER_VERIFICATION", "APPROVED", "REJECTED", "CORRECTION_REQUIRED", "EXPIRED"].map((status) => <option key={status}>{status}</option>)}</select></label>
+        {isAdmin && <label><span className="sr-only">Company</span><select className="rtsrmp-input" value={companyFilter} onChange={(event) => { setCompanyFilter(event.target.value); setLocationFilter("ALL"); }}><option value="ALL">All companies</option>{data.companies.map((company) => <option key={company.company_id} value={company.company_id}>{company.company_name}</option>)}</select></label>}
+        {isAdmin && <label><span className="sr-only">Location</span><select className="rtsrmp-input" value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)}><option value="ALL">All locations</option>{locations.map((item) => <option key={item.location_id} value={item.location_id}>{item.location_name}</option>)}</select></label>}
+        <input className="rtsrmp-input" aria-label="Scheme filter" placeholder="Scheme" value={schemeFilter} onChange={(event) => setSchemeFilter(event.target.value)} />
+        <input className="rtsrmp-input" aria-label="Qualification filter" placeholder="Qualification" value={qualificationFilter} onChange={(event) => setQualificationFilter(event.target.value)} />
+        <label className="text-xs text-slate-500">Effective from<input type="date" className="rtsrmp-input mt-1" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} /></label>
+        <label className="text-xs text-slate-500">Effective to<input type="date" className="rtsrmp-input mt-1" value={effectiveTo} onChange={(event) => setEffectiveTo(event.target.value)} /></label>
+        {showAllFilters && <>
+          <label className="text-xs text-slate-500">Submission date from<input type="date" className="rtsrmp-input mt-1" value={submissionFrom} onChange={(event) => setSubmissionFrom(event.target.value)} /></label>
+          <label className="text-xs text-slate-500">Submission date to<input type="date" className="rtsrmp-input mt-1" value={submissionTo} onChange={(event) => setSubmissionTo(event.target.value)} /></label>
+          <label className="text-xs text-slate-500">Verification date from<input type="date" className="rtsrmp-input mt-1" value={verificationFrom} onChange={(event) => setVerificationFrom(event.target.value)} /></label>
+          <label className="text-xs text-slate-500">Verification date to<input type="date" className="rtsrmp-input mt-1" value={verificationTo} onChange={(event) => setVerificationTo(event.target.value)} /></label>
+        </>}
+      </div>
+    </section>
+  );
+}
+
+function SubmissionTable({
+  rows,
+  allCount,
+  page,
+  pageCount,
+  sortBy,
+  sortAscending,
+  onSort,
+  getCompanyName,
+  getLocationName,
+  getCompanyHRName,
+  isAdmin = false,
+  isCompanyHR = false,
+  documents = [],
+  onEdit,
+  onReview,
+  onPage,
+  onDocument,
+}: {
+  rows: RTSRMPSubmission[];
+  allCount: number;
+  page: number;
+  pageCount: number;
+  sortBy: string;
+  sortAscending: boolean;
+  onSort?: (key: string) => void;
+  getCompanyName: (id: string) => string;
+  getLocationName: (id: string) => string;
+  getCompanyHRName?: (profileId: string | null) => string;
+  isAdmin?: boolean;
+  isCompanyHR?: boolean;
+  documents?: RTSRMPData["documents"];
+  onEdit?: (submission: RTSRMPSubmission) => void;
+  onReview?: (submission: RTSRMPSubmission) => void;
+  onPage?: (page: number) => void;
+  onDocument?: (path: string) => void;
+}) {
+  const columns: [string, string][] = [
+    ["company_id", "Company / Location"],
+    ["scheme", "Scheme / Qualification"],
+    ["stipend_rate", "Stipend"],
+    ["effective_from", "Effective period"],
+    ["status", "Status"],
+    ["created_at", "Submitted"],
+  ];
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <div className="overflow-x-auto">
+        <table className="min-w-[950px] w-full text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800/70">
+            <tr>{columns.map(([key, label]) => <th key={key} className="px-4 py-3"><button type="button" onClick={() => onSort?.(key)} className="inline-flex items-center gap-1">{label}{sortBy === key && <ChevronDown className={`h-3.5 w-3.5 ${sortAscending ? "rotate-180" : ""}`} />}</button></th>)}{isAdmin && <th className="px-4 py-3">Company HR</th>}<th className="px-4 py-3">Documents</th><th className="px-4 py-3 text-right">Actions</th></tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {rows.map((submission) => (
+              <tr key={submission.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                <td className="px-4 py-3"><p className="font-semibold">{getCompanyName(submission.company_id)}</p><p className="mt-1 text-xs text-slate-500">{getLocationName(submission.location_id)}</p></td>
+                <td className="px-4 py-3"><p className="font-medium">{submission.scheme}</p><p className="mt-1 text-xs text-slate-500">{submission.qualification}{submission.trade ? ` · ${submission.trade}` : ""}</p></td>
+                <td className="px-4 py-3 font-semibold">{currency(submission.stipend_rate, submission.currency)}<p className="mt-1 text-xs font-normal text-slate-500">{submission.payment_frequency}</p></td>
+                <td className="px-4 py-3 text-xs">{displayDate(submission.effective_from)}<p className="mt-1 text-slate-500">{submission.effective_to ? `to ${displayDate(submission.effective_to)}` : "No end date"}</p></td>
+                <td className="px-4 py-3"><StatusPill status={submission.status} />{submission.review_remarks && <p className="mt-1 max-w-44 truncate text-xs text-amber-700" title={submission.review_remarks}>{submission.review_remarks}</p>}</td>
+                <td className="px-4 py-3 text-xs text-slate-500">{displayDate(submission.submitted_at ?? submission.created_at)}</td>
+                {isAdmin && <td className="px-4 py-3 text-xs">{getCompanyHRName?.(submission.created_by) ?? submission.created_by}</td>}
+                <td className="px-4 py-3 text-xs">{documents.filter((item) => item.submission_id === submission.id).map((doc) => <button key={doc.id} type="button" onClick={() => onDocument?.(doc.storage_path)} className="mr-2 inline-flex items-center gap-1 text-orange-700 hover:underline dark:text-orange-300"><FileText className="h-3.5 w-3.5" />{doc.file_name}</button>)}</td>
+                <td className="px-4 py-3 text-right"><div className="flex justify-end gap-2">
+                  {isCompanyHR && ["DRAFT", "CORRECTION_REQUIRED"].includes(submission.status) && <button type="button" onClick={() => onEdit?.(submission)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800">Edit</button>}
+                  {isAdmin && ["SUBMITTED", "UNDER_VERIFICATION"].includes(submission.status) && <button type="button" onClick={() => onReview?.(submission)} className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white dark:bg-orange-600">Review</button>}
+                </div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!rows.length && <EmptyInline message="No submissions match the current filters." />}
+      <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-500 dark:border-slate-800">
+        <span>{allCount ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, allCount)} of ${allCount}` : "No records"}</span>
+        {onPage && <div className="flex items-center gap-2"><button type="button" disabled={page <= 1} onClick={() => onPage(page - 1)} className="rounded border px-2 py-1 disabled:opacity-40">Previous</button><span>Page {page} / {pageCount}</span><button type="button" disabled={page >= pageCount} onClick={() => onPage(page + 1)} className="rounded border px-2 py-1 disabled:opacity-40">Next</button></div>}
+      </div>
+    </section>
+  );
+}
+
+function SubmissionForm({
+  form,
+  error,
+  successMessage,
+  setForm,
+  data,
+  profile,
+  isSaving,
+  isUploading,
+  uploadType,
+  setUploadType,
+  onClose,
+  onSave,
+  onSubmit,
+  onUpload,
+  getCompanyName,
+  getLocationName,
+  onDocument,
+}: {
+  form: DraftForm;
+  error: string;
+  successMessage: string;
+  setForm: Dispatch<SetStateAction<DraftForm | null>>;
+  data: RTSRMPData;
+  profile: ReturnType<typeof useRTSRMPProfile>;
+  isSaving: boolean;
+  isUploading: boolean;
+  uploadType: string;
+  setUploadType: (value: string) => void;
+  onClose: () => void;
+  onSave: () => void;
+  onSubmit: () => void;
+  onUpload: (file?: File | null) => void;
+  getCompanyName: (id: string) => string;
+  getLocationName: (id: string) => string;
+  onDocument: (path: string) => void;
+}) {
+  const setField = <K extends keyof DraftForm>(key: K, value: DraftForm[K]) => setForm((current) => current ? { ...current, [key]: value } : current);
+  const setOvertime = <K extends keyof DraftForm["overtime"]>(key: K, value: DraftForm["overtime"][K]) =>
+    setForm((current) => current ? { ...current, overtime: { ...current.overtime, [key]: value } } : current);
+  const setEligibility = <K extends keyof DraftForm["eligibility"]>(key: K, value: DraftForm["eligibility"][K]) =>
+    setForm((current) => current ? { ...current, eligibility: { ...current.eligibility, [key]: value } } : current);
+  const setRequirement = <K extends keyof DraftForm["requirement"]>(key: K, value: DraftForm["requirement"][K]) =>
+    setForm((current) => current ? { ...current, requirement: { ...current.requirement, [key]: value } } : current);
+  const updateBenefit = (index: number, key: keyof BenefitDraft, value: string | boolean) =>
+    setForm((current) => current ? { ...current, benefits: current.benefits.map((item, position) => position === index ? { ...item, [key]: value } : item) } : current);
+  const updateDeduction = (index: number, key: keyof DeductionDraft, value: string | boolean) =>
+    setForm((current) => current ? { ...current, deductions: current.deductions.map((item, position) => position === index ? { ...item, [key]: value } : item) } : current);
+  const submission = form.id ? data.submissions.find((item) => item.id === form.id) : undefined;
+  const docs = form.id ? data.documents.filter((document) => document.submission_id === form.id) : [];
+  const messageRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error || successMessage) messageRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [error, successMessage]);
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 p-2 sm:p-5">
+      <section role="dialog" aria-modal="true" aria-labelledby="rtsrmp-form-title" className="mx-auto my-3 max-w-5xl rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+          <div><p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-600">Company submission</p><h2 id="rtsrmp-form-title" className="mt-1 text-xl font-semibold">{form.id ? "Edit stipend submission" : "New stipend submission"}</h2></div>
+          <button type="button" onClick={onClose} aria-label="Close form" className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"><X className="h-5 w-5" /></button>
+        </div>
+        {(error || successMessage) && <div ref={messageRef} className="space-y-2 px-5 pt-4">
+          {error && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">{error}</div>}
+          {successMessage && <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">{successMessage}</div>}
+        </div>}
+        <div className="space-y-6 p-5">
+          <section className="grid gap-4 rounded-xl border border-orange-100 bg-orange-50/60 p-4 sm:grid-cols-2 dark:border-orange-900/50 dark:bg-orange-950/20">
+            <ReadOnlyValue label="Company" value={profile.company_id ? getCompanyName(profile.company_id) : "Not assigned"} />
+            <ReadOnlyValue label="Location" value={profile.location_id ? getLocationName(profile.location_id) : "Not assigned"} />
+          </section>
+          {submission && <div className="flex items-center gap-3 text-sm"><StatusPill status={submission.status} /><span className="text-slate-500">Created {displayDate(submission.created_at)}</span></div>}
+          <section className="space-y-4">
+            <SectionTitle title="Stipend rate" subtitle="Fields marked * are required. Approved records are preserved as history." />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <SelectField label="Scheme" required value={form.scheme_id} onChange={(value) => setField("scheme_id", value)} options={mergeOptions(data.schemes.filter((item) => item.is_active || item.id === form.scheme_id).map((item) => ({ value: item.id, label: item.name })), DEFAULT_SCHEMES)} />
+              <SelectField label="Qualification" required value={form.qualification_id} onChange={(value) => setField("qualification_id", value)} options={mergeOptions(data.qualifications.filter((item) => item.is_active || item.id === form.qualification_id).map((item) => ({ value: item.id, label: item.qualification_name })), DEFAULT_QUALIFICATIONS)} />
+              <Field label="Trade / Category" value={form.trade} onChange={(value) => setField("trade", value)} />
+              <Field label="Stipend rate" required type="number" min="0" value={form.stipend_rate} onChange={(value) => setField("stipend_rate", value)} />
+              <Field label="Payment frequency" required value={form.payment_frequency} onChange={(value) => setField("payment_frequency", value)} placeholder="MONTHLY" />
+              <Field label="Currency" required value={form.currency} onChange={(value) => setField("currency", value.toUpperCase())} placeholder="INR" />
+              <Field label="Effective from" required type="date" value={form.effective_from} onChange={(value) => setField("effective_from", value)} />
+              <Field label="Effective to" type="date" value={form.effective_to} onChange={(value) => setField("effective_to", value)} />
+              <Field label="Required trainees" type="number" min="0" value={form.requirement_count} onChange={(value) => setField("requirement_count", value)} />
+            </div>
+            <TextArea label="Stipend remarks" value={form.remarks} onChange={(value) => setField("remarks", value)} />
+          </section>
+
+          <section className="space-y-4 border-t border-slate-200 pt-5 dark:border-slate-800">
+            <SectionTitle title="OT / Extra time" subtitle="Optional rate, calculation basis, limits and effective period." />
+            <label className="inline-flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={form.overtime.applicable} onChange={(event) => setOvertime("applicable", event.target.checked)} /> Overtime applicable</label>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="OT rate" type="number" min="0" value={form.overtime.ot_rate} onChange={(value) => setOvertime("ot_rate", value)} />
+              <Field label="Calculation basis" value={form.overtime.calculation_basis} onChange={(value) => setOvertime("calculation_basis", value)} placeholder="Company-defined basis" />
+              <Field label="Hourly / Daily / Other" value={form.overtime.rate_unit} onChange={(value) => setOvertime("rate_unit", value)} />
+              <Field label="Maximum applicable hours" type="number" min="0" value={form.overtime.maximum_hours} onChange={(value) => setOvertime("maximum_hours", value)} />
+              <Field label="Effective from" type="date" value={form.overtime.effective_from} onChange={(value) => setOvertime("effective_from", value)} />
+              <Field label="Effective to" type="date" value={form.overtime.effective_to} onChange={(value) => setOvertime("effective_to", value)} />
+            </div>
+            <TextArea label="OT remarks" value={form.overtime.remarks} onChange={(value) => setOvertime("remarks", value)} />
+          </section>
+
+          <section className="space-y-4 border-t border-slate-200 pt-5 dark:border-slate-800">
+            <SectionTitle title="Benefits" subtitle="Includes workbook reference fields: attendance bonus, DBT, bus, canteen and accommodation." />
+            <div className="space-y-3">
+              {form.benefits.map((benefit, index) => (
+                <div key={`${benefit.benefit_type}-${index}`} className="grid gap-3 rounded-xl border border-slate-200 p-3 sm:grid-cols-2 lg:grid-cols-6 dark:border-slate-800">
+                  <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={benefit.applicable} onChange={(event) => updateBenefit(index, "applicable", event.target.checked)} />{benefit.benefit_type}</label>
+                  <Field label="Value" value={benefit.value} onChange={(value) => updateBenefit(index, "value", value)} />
+                  <Field label="Amount" type="number" min="0" value={benefit.amount} onChange={(value) => updateBenefit(index, "amount", value)} />
+                  <Field label="Frequency" value={benefit.frequency} onChange={(value) => updateBenefit(index, "frequency", value)} placeholder="Monthly / One-time" />
+                  <Field label="Effective from" type="date" value={benefit.effective_from} onChange={(value) => updateBenefit(index, "effective_from", value)} />
+                  <Field label="Effective to" type="date" value={benefit.effective_to} onChange={(value) => updateBenefit(index, "effective_to", value)} />
+                  <Field label="Remarks" value={benefit.remarks} onChange={(value) => updateBenefit(index, "remarks", value)} />
+                </div>
+              ))}
+              <button type="button" onClick={() => setForm((current) => current ? { ...current, benefits: [...current.benefits, emptyBenefit("Other")] } : current)} className="text-sm font-semibold text-orange-700 hover:underline dark:text-orange-300">+ Add another benefit</button>
+            </div>
+          </section>
+
+          <section className="space-y-4 border-t border-slate-200 pt-5 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-3"><SectionTitle title="Deductions" subtitle="Amount and percentage are mutually exclusive." /><button type="button" onClick={() => setForm((current) => current ? { ...current, deductions: [...current.deductions, { deduction_type: "", applicable: true, amount: "", percentage: "", frequency: "MONTHLY", reason: "", remarks: "" }] } : current)} className="inline-flex items-center gap-1 text-sm font-semibold text-orange-700"><Plus className="h-4 w-4" /> Add deduction</button></div>
+            {!form.deductions.length && <EmptyInline message="No deductions have been entered." />}
+            {form.deductions.map((deduction, index) => (
+              <div key={`deduction-${index}`} className="grid gap-3 rounded-xl border border-slate-200 p-3 sm:grid-cols-2 lg:grid-cols-4 dark:border-slate-800">
+                <Field label="Deduction type" required value={deduction.deduction_type} onChange={(value) => updateDeduction(index, "deduction_type", value)} />
+                <Field label="Amount" type="number" min="0" value={deduction.amount} onChange={(value) => updateDeduction(index, "amount", value)} />
+                <Field label="Percentage" type="number" min="0" max="100" value={deduction.percentage} onChange={(value) => updateDeduction(index, "percentage", value)} />
+                <Field label="Frequency" value={deduction.frequency} onChange={(value) => updateDeduction(index, "frequency", value)} />
+                <Field label="Reason" value={deduction.reason} onChange={(value) => updateDeduction(index, "reason", value)} />
+                <Field label="Remarks" value={deduction.remarks} onChange={(value) => updateDeduction(index, "remarks", value)} />
+                <button type="button" onClick={() => setForm((current) => current ? { ...current, deductions: current.deductions.filter((_, position) => position !== index) } : current)} className="text-left text-xs font-semibold text-rose-700 hover:underline">Remove deduction</button>
+              </div>
+            ))}
+          </section>
+
+          <section className="space-y-4 border-t border-slate-200 pt-5 dark:border-slate-800">
+            <SectionTitle title="Eligibility" subtitle="Enter business criteria relevant to the submitted rate." />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Minimum age" type="number" min="0" value={form.eligibility.min_age} onChange={(value) => setEligibility("min_age", value)} />
+              <Field label="Maximum age" type="number" min="0" value={form.eligibility.max_age} onChange={(value) => setEligibility("max_age", value)} />
+              <Field label="Education" value={form.eligibility.education} onChange={(value) => setEligibility("education", value)} />
+              <Field label="Qualification" value={form.eligibility.qualification} onChange={(value) => setEligibility("qualification", value)} />
+              <Field label="Trade" value={form.eligibility.trade} onChange={(value) => setEligibility("trade", value)} />
+              <Field label="Experience" value={form.eligibility.experience} onChange={(value) => setEligibility("experience", value)} />
+              <Field label="Gender (where business-appropriate)" value={form.eligibility.gender} onChange={(value) => setEligibility("gender", value)} />
+              <Field label="Other criteria (JSON)" value={form.eligibility.other} onChange={(value) => setEligibility("other", value)} placeholder='{"criterion":"value"}' />
+            </div>
+            <TextArea label="Eligibility remarks" value={form.eligibility.remarks} onChange={(value) => setEligibility("remarks", value)} />
+          </section>
+
+          <section className="space-y-4 border-t border-slate-200 pt-5 dark:border-slate-800">
+            <SectionTitle title="Company requirement" subtitle="Requirement count, current students and joining timeline." />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Requirement count" type="number" min="0" value={form.requirement.requirement_count || form.requirement_count} onChange={(value) => setRequirement("requirement_count", value)} />
+              <Field label="Preferred joining timeline" value={form.requirement.preferred_joining_timeline} onChange={(value) => setRequirement("preferred_joining_timeline", value)} placeholder="Company-provided timeline" />
+            </div>
+            <TextArea label="Requirement remarks" value={form.requirement.remarks} onChange={(value) => setRequirement("remarks", value)} />
+          </section>
+
+          <section className="space-y-4 border-t border-slate-200 pt-5 dark:border-slate-800">
+            <SectionTitle title="Supporting documents" subtitle="Private storage. PDF, JPEG, PNG and DOCX files up to 15 MB." />
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="min-w-[200px] flex-1 text-xs font-medium text-slate-600 dark:text-slate-300">Document type<select className="rtsrmp-input mt-1" value={uploadType} onChange={(event) => setUploadType(event.target.value)}>{RTSRMP_DOCUMENT_TYPES.map((type) => <option key={type}>{type}</option>)}</select></label>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold dark:border-slate-700"><Upload className="h-4 w-4" />Choose file<input type="file" accept=".pdf,.jpg,.jpeg,.png,.docx" disabled={!form.id || isUploading} className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) onUpload(file); event.currentTarget.value = ""; }} /></label>
+              {isUploading && <span className="text-sm text-slate-500">Uploading…</span>}
+              {!form.id && <span className="text-xs text-slate-500">Save the draft before uploading.</span>}
+            </div>
+            {docs.map((document) => <div key={document.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800"><span>{document.document_type} · {document.file_name}</span><button type="button" onClick={() => onDocument(document.storage_path)} className="font-semibold text-orange-700 hover:underline dark:text-orange-300">Open securely</button></div>)}
+          </section>
+        </div>
+        <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+          <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold dark:border-slate-700">Cancel</button>
+          <button type="button" disabled={isSaving || isUploading} onClick={onSave} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold disabled:opacity-50 dark:border-slate-700">Save draft</button>
+          <button type="button" disabled={isSaving || isUploading} onClick={onSubmit} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{isSaving ? "Saving…" : "Save and submit"}</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SectionTitle({ title, subtitle }: { title: string; subtitle: string }) {
+  return <div><h3 className="font-semibold">{title}</h3><p className="mt-1 text-xs text-slate-500">{subtitle}</p></div>;
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  type = "text",
+  required = false,
+  min,
+  max,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  required?: boolean;
+  min?: string;
+  max?: string;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
+      {label}{required && <span className="ml-1 text-rose-600" aria-label="required">*</span>}
+      <input className="rtsrmp-input mt-1.5" type={type} required={required} min={min} max={max} step={type === "number" ? "any" : undefined} placeholder={placeholder} value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function mergeOptions(existing: { value: string; label: string }[], defaults: string[]) {
+  const have = new Set(existing.map((item) => item.label.trim().toLowerCase()));
+  return [
+    ...existing,
+    ...defaults.filter((name) => !have.has(name.toLowerCase())).map((name) => ({ value: `new:${name}`, label: name })),
+  ];
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  required?: boolean;
+}) {
+  return (
+    <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
+      {label}{required && <span className="ml-1 text-rose-600" aria-label="required">*</span>}
+      <select className="rtsrmp-input mt-1.5" required={required} value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">Select {label.toLowerCase()}</option>
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function TextArea({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">{label}<textarea rows={2} className="rtsrmp-input mt-1.5" value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+}
+
+function ReadOnlyValue({ label, value }: { label: string; value: string }) {
+  return <div><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-1 text-sm font-semibold">{value}</p><span className="mt-1 inline-block text-[10px] uppercase tracking-wide text-slate-400">Assigned · read only</span></div>;
+}
+
+function ReviewDialog({
+  submission,
+  data,
+  error,
+  successMessage,
+  remarks,
+  setRemarks,
+  isSaving,
+  getCompanyName,
+  getLocationName,
+  onClose,
+  onReview,
+  onDocument,
+}: {
+  submission: RTSRMPSubmission;
+  data: RTSRMPData;
+  error: string;
+  successMessage: string;
+  remarks: string;
+  setRemarks: (value: string) => void;
+  isSaving: boolean;
+  getCompanyName: (id: string) => string;
+  getLocationName: (id: string) => string;
+  onClose: () => void;
+  onReview: (action: "UNDER_VERIFICATION" | "APPROVED" | "REJECTED" | "CORRECTION_REQUIRED") => void;
+  onDocument: (path: string) => void;
+}) {
+  const logs = data.verificationLogs.filter((item) => item.submission_id === submission.id);
+  const docs = data.documents.filter((item) => item.submission_id === submission.id);
+  const overtime = data.overtime.find((item) => item.submission_id === submission.id);
+  const benefits = data.benefits.filter((item) => item.submission_id === submission.id);
+  const deductions = data.deductions.filter((item) => item.submission_id === submission.id);
+  const eligibility = data.eligibility.find((item) => item.submission_id === submission.id);
+  const requirements = data.requirements.filter((item) => item.submission_id === submission.id);
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 p-2 sm:p-5">
+      <section role="dialog" aria-modal="true" aria-labelledby="rtsrmp-review-title" className="mx-auto my-3 max-w-5xl rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-600">Verification</p><h2 id="rtsrmp-review-title" className="mt-1 text-xl font-semibold">{getCompanyName(submission.company_id)} · {getLocationName(submission.location_id)}</h2></div><button type="button" onClick={onClose} aria-label="Close review" className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"><X className="h-5 w-5" /></button></div>
+        {(error || successMessage) && <div className="space-y-2 px-5 pt-4">
+          {error && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">{error}</div>}
+          {successMessage && <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">{successMessage}</div>}
+        </div>}
+        <div className="space-y-5 p-5">
+          <div className="flex flex-wrap items-center gap-3"><StatusPill status={submission.status} /><span className="text-sm">{submission.scheme} · {submission.qualification} · {submission.trade || "—"}</span></div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <ReviewValue label="Stipend rate" value={currency(submission.stipend_rate, submission.currency)} />
+            <ReviewValue label="Effective period" value={`${displayDate(submission.effective_from)} – ${displayDate(submission.effective_to)}`} />
+            <ReviewValue label="Coordinator" value={submission.coordinator_name || "—"} />
+            <ReviewValue label="Contact" value={submission.coordinator_contact || "—"} />
+            <ReviewValue label="Current students" value={String(submission.current_students ?? "—")} />
+            <ReviewValue label="Required trainees" value={String(submission.requirement_count ?? "—")} />
+            <ReviewValue label="Payment frequency" value={submission.payment_frequency} />
+            <ReviewValue label="Submitted" value={displayDate(submission.submitted_at)} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <ReviewList title="OT / extra time" rows={overtime ? [`Applicable: ${overtime.applicable ? "Yes" : "No"}`, `Rate: ${overtime.ot_rate ?? "—"} ${overtime.rate_unit ?? ""}`, `Basis: ${overtime.calculation_basis || "—"}`, `Maximum hours: ${overtime.maximum_hours ?? "—"}`, overtime.remarks].filter(Boolean) : []} />
+            <ReviewList title="Benefits" rows={benefits.map((item) => `${item.benefit_type}: ${item.applicable ? "Yes" : "No"} · ${item.amount ?? item.value ?? "—"} ${item.frequency ?? ""}`)} />
+            <ReviewList title="Deductions" rows={deductions.map((item) => `${item.deduction_type}: ${item.applicable ? item.amount ?? item.percentage ?? "Applicable" : "Not applicable"} · ${item.frequency ?? ""} · ${item.reason ?? ""}`)} />
+            <ReviewList
+              title="Eligibility"
+              rows={
+                eligibility
+                  ? [`Age: ${eligibility.min_age ?? "—"}-${eligibility.max_age ?? "—"} · ${eligibility.education ?? ""}`]
+                  : []
+              }
+            />
+          </div>
+          <div className="grid gap-4">
+            <ReviewList title="Company requirements" rows={requirements.map((item) => `${item.requirement_count} trainees · ${item.preferred_joining_timeline || "No timeline"}${item.remarks ? ` · ${item.remarks}` : ""}`)} />
+          </div>
+          {docs.length > 0 && (
+            <div className="space-y-2">
+              {docs.map((document) => (
+                <div key={document.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800">
+                  <span>{document.document_type} · {document.file_name}</span>
+                  <button type="button" onClick={() => onDocument(document.storage_path)} className="font-semibold text-orange-700 hover:underline dark:text-orange-300">Open securely</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <ReviewList title="Verification history" rows={logs.map((item) => `${item.action.replaceAll("_", " ")} · ${displayDate(item.created_at)}${item.remarks ? ` · ${item.remarks}` : ""}`)} />
+          <TextArea label="Verification remarks (required for reject / correction)" value={remarks} onChange={setRemarks} />
+        </div>
+        <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 px-5 py-4 dark:border-slate-800">
+          <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold dark:border-slate-700">Close</button>
+          {submission.status === "SUBMITTED" && (
+            <button type="button" disabled={isSaving} onClick={() => onReview("UNDER_VERIFICATION")} className="rounded-lg border border-violet-300 px-4 py-2 text-sm font-semibold text-violet-800 disabled:opacity-50 dark:border-violet-800 dark:text-violet-300">Start verification</button>
+          )}
+          <button type="button" disabled={isSaving} onClick={() => onReview("CORRECTION_REQUIRED")} className="rounded-lg border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-800 disabled:opacity-50 dark:border-amber-800 dark:text-amber-300">Request correction</button>
+          <button type="button" disabled={isSaving} onClick={() => onReview("REJECTED")} className="rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-800 disabled:opacity-50 dark:border-rose-800 dark:text-rose-300">Reject</button>
+          <button type="button" disabled={isSaving} onClick={() => onReview("APPROVED")} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">{isSaving ? "Saving…" : "Approve"}</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ReviewValue({ label, value }: { label: string; value: string }) {
+  return <div><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-1 text-sm font-semibold">{value}</p></div>;
+}
+
+function ReviewList({ title, rows }: { title: string; rows: (string | null | undefined)[] }) {
+  const items = rows.filter((row): row is string => Boolean(row));
+  return (
+    <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+      <h4 className="text-sm font-semibold">{title}</h4>
+      {items.length ? (
+        <ul className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-300">
+          {items.map((row, index) => <li key={`${row}-${index}`}>{row}</li>)}
+        </ul>
+      ) : <p className="mt-2 text-xs text-slate-500">No information provided.</p>}
+    </div>
+  );
+}
+
+function HistoryTable({
+  data,
+  getCompanyName,
+  getLocationName,
+}: {
+  data: RTSRMPHistory[];
+  getCompanyName: (id: string) => string;
+  getLocationName: (id: string) => string;
+}) {
+  return (
+    <section className="space-y-4">
+      <div>
+        <h3 className="text-xl font-semibold">Rate history</h3>
+        <p className="mt-1 text-sm text-slate-500">Approved rate snapshots preserved for audit.</p>
+      </div>
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <table className="min-w-[900px] w-full text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800/70">
+            <tr>
+              <th className="px-4 py-3">Company / Location</th>
+              <th className="px-4 py-3">Scheme / Qualification</th>
+              <th className="px-4 py-3">Rate</th>
+              <th className="px-4 py-3">Effective period</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Approved</th>
+              <th className="px-4 py-3">Change reason</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {data.map((item, index) => (
+              <tr key={`${item.submission_id}-${item.approved_at}-${index}`}>
+                <td className="px-4 py-3"><p className="font-semibold">{getCompanyName(item.company_id)}</p><p className="mt-1 text-xs text-slate-500">{getLocationName(item.location_id)}</p></td>
+                <td className="px-4 py-3"><p className="font-medium">{item.scheme}</p><p className="mt-1 text-xs text-slate-500">{item.qualification}{item.trade ? ` · ${item.trade}` : ""}</p></td>
+                <td className="px-4 py-3 font-semibold">{currency(item.stipend_rate, item.currency)}</td>
+                <td className="px-4 py-3 text-xs">{displayDate(item.effective_from)}<p className="mt-1 text-slate-500">{item.effective_to ? `to ${displayDate(item.effective_to)}` : "No end date"}</p></td>
+                <td className="px-4 py-3"><StatusPill status={item.status} /></td>
+                <td className="px-4 py-3 text-xs">{displayDate(item.approved_at)}</td>
+                <td className="px-4 py-3 text-xs text-slate-500">{item.change_reason ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!data.length && <EmptyInline message="No approved rate history is available yet." />}
+      </div>
+    </section>
+  );
+}
+
+function DocumentsTable({
+  data,
+  getCompanyName,
+  getLocationName,
+  onOpen,
+}: {
+  data: RTSRMPData["documents"];
+  getCompanyName: (id: string) => string;
+  getLocationName: (id: string) => string;
+  onOpen: (path: string) => void;
+}) {
+  return (
+    <section className="space-y-4">
+      <div>
+        <h3 className="text-xl font-semibold">Supporting documents</h3>
+        <p className="mt-1 text-sm text-slate-500">Documents are stored privately and opened through short-lived secure links.</p>
+      </div>
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <table className="min-w-[800px] w-full text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800/70">
+            <tr>
+              <th className="px-4 py-3">Company / Location</th>
+              <th className="px-4 py-3">Type</th>
+              <th className="px-4 py-3">File</th>
+              <th className="px-4 py-3">Uploaded</th>
+              <th className="px-4 py-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {data.map((item) => (
+              <tr key={item.id}>
+                <td className="px-4 py-3"><p className="font-semibold">{getCompanyName(item.company_id)}</p><p className="mt-1 text-xs text-slate-500">{getLocationName(item.location_id)}</p></td>
+                <td className="px-4 py-3">{item.document_type}</td>
+                <td className="px-4 py-3">{item.file_name}</td>
+                <td className="px-4 py-3 text-xs text-slate-500">{displayDate(item.created_at)}</td>
+                <td className="px-4 py-3 text-right"><button type="button" onClick={() => onOpen(item.storage_path)} className="text-xs font-semibold text-orange-700 hover:underline dark:text-orange-300">Open securely</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!data.length && <EmptyInline message="No supporting documents have been uploaded." />}
+      </div>
+    </section>
+  );
+}
+
+function ComparisonTable({
+  submissions,
+  data,
+  getCompanyName,
+  getLocationName,
+}: {
+  submissions: RTSRMPSubmission[];
+  data: RTSRMPData;
+  getCompanyName: (id: string) => string;
+  getLocationName: (id: string) => string;
+}) {
+  const rows = submissions.filter((item) => item.status === "APPROVED");
+  const rates = rows.map((item) => Number(item.stipend_rate)).filter(Number.isFinite);
+  const average = rates.length ? rates.reduce((total, value) => total + value, 0) / rates.length : 0;
+  return (
+    <section className="space-y-4">
+      <div>
+        <h3 className="text-xl font-semibold">Rate comparison</h3>
+        <p className="mt-1 text-sm text-slate-500">Approved stipend rates compared with the average of the current selection.</p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <ReviewValue label="Approved records" value={String(rows.length)} />
+        <ReviewValue label="Average rate" value={currency(average)} />
+        <ReviewValue label="Range" value={rates.length ? `${currency(Math.min(...rates))} – ${currency(Math.max(...rates))}` : "—"} />
+      </div>
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <table className="min-w-[800px] w-full text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800/70">
+            <tr>
+              <th className="px-4 py-3">Company / Location</th>
+              <th className="px-4 py-3">Scheme / Qualification</th>
+              <th className="px-4 py-3">Stipend</th>
+              <th className="px-4 py-3">Vs average</th>
+              <th className="px-4 py-3">Benefits</th>
+              <th className="px-4 py-3">OT rate</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {rows.map((item) => {
+              const difference = Number(item.stipend_rate) - average;
+              const benefitCount = data.benefits.filter((benefit) => benefit.submission_id === item.id && benefit.applicable).length;
+              const overtime = data.overtime.find((entry) => entry.submission_id === item.id && entry.applicable);
+              return (
+                <tr key={item.id}>
+                  <td className="px-4 py-3"><p className="font-semibold">{getCompanyName(item.company_id)}</p><p className="mt-1 text-xs text-slate-500">{getLocationName(item.location_id)}</p></td>
+                  <td className="px-4 py-3"><p className="font-medium">{item.scheme}</p><p className="mt-1 text-xs text-slate-500">{item.qualification}</p></td>
+                  <td className="px-4 py-3 font-semibold">{currency(item.stipend_rate, item.currency)}</td>
+                  <td className={`px-4 py-3 text-xs font-semibold ${difference >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{difference >= 0 ? "+" : "−"}{currency(Math.abs(difference), item.currency)}</td>
+                  <td className="px-4 py-3">{benefitCount}</td>
+                  <td className="px-4 py-3">{overtime?.ot_rate != null ? currency(overtime.ot_rate, item.currency) : "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {!rows.length && <EmptyInline message="No approved rates match the current filters." />}
+      </div>
+    </section>
+  );
+}
+
+function PrintReport({
+  reportType,
+  rows,
+  data,
+  filters,
+  getCompanyName,
+  getLocationName,
+  getCompanyHRName,
+  profileName,
+}: {
+  reportType: string;
+  rows: RTSRMPSubmission[];
+  data: RTSRMPData;
+  filters: string;
+  getCompanyName: (id: string) => string;
+  getLocationName: (id: string) => string;
+  getCompanyHRName: (profileId: string | null) => string;
+  profileName: string;
+}) {
+  return (
+    <section className="rtsrmp-print-report rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+      <header className="border-b border-slate-200 pb-3 dark:border-slate-800">
+        <h3 className="text-lg font-semibold">{reportType}</h3>
+        <p className="mt-1 text-xs text-slate-500">Generated {new Date().toLocaleString("en-IN")} by {profileName} · {rows.length} record(s)</p>
+        <p className="mt-1 text-xs text-slate-500">Filters: {filters}</p>
+      </header>
+      <div className="mt-3 overflow-x-auto">
+        <table className="min-w-[900px] w-full text-left text-xs">
+          <thead className="uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="py-2 pr-3">Company</th>
+              <th className="py-2 pr-3">Location</th>
+              <th className="py-2 pr-3">Scheme</th>
+              <th className="py-2 pr-3">Qualification</th>
+              <th className="py-2 pr-3">Stipend</th>
+              <th className="py-2 pr-3">Effective</th>
+              <th className="py-2 pr-3">Status</th>
+              <th className="py-2 pr-3">Company HR</th>
+              <th className="py-2 pr-3">Documents</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {rows.map((item) => (
+              <tr key={item.id}>
+                <td className="py-2 pr-3">{getCompanyName(item.company_id)}</td>
+                <td className="py-2 pr-3">{getLocationName(item.location_id)}</td>
+                <td className="py-2 pr-3">{item.scheme}</td>
+                <td className="py-2 pr-3">{item.qualification}</td>
+                <td className="py-2 pr-3">{currency(item.stipend_rate, item.currency)}</td>
+                <td className="py-2 pr-3">{displayDate(item.effective_from)}{item.effective_to ? ` – ${displayDate(item.effective_to)}` : ""}</td>
+                <td className="py-2 pr-3">{item.status.replaceAll("_", " ")}</td>
+                <td className="py-2 pr-3">{getCompanyHRName(item.created_by)}</td>
+                <td className="py-2 pr-3">{data.documents.filter((document) => document.submission_id === item.id).length}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!rows.length && <EmptyInline message="No records match the selected filters." />}
+      </div>
+    </section>
+  );
+}

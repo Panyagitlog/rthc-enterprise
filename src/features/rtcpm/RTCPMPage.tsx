@@ -163,12 +163,33 @@ const withRetry = async <T,>(run: () => Promise<{ data?: T; error: any }>, attem
   return result;
 };
 
+// PostgREST caps each response (1000 rows by default); page through so totals use the full authorized dataset.
+const fetchAllPages = async (buildQuery: () => any): Promise<any[]> => {
+  const pageSize = 1000;
+  const all: any[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await withRetry<any[]>(() => buildQuery().range(from, from + pageSize - 1));
+    if (error) throw error;
+    const page = data || [];
+    all.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return all;
+};
+
 export default function RTCPMPage() {
   const navigate = useNavigate();
   const auth = useAuth() as any;
   const currentRole = normalizeRole(auth?.role || "");
   const [parameterPerformance, setParameterPerformance] = useState<any[]>([]);
   const [assessments, setAssessments] = useState<any[]>([]);
+  const [assessmentScores, setAssessmentScores] = useState<any[] | null>(null);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [assessmentPage, setAssessmentPage] = useState(1);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [myAssessments, setMyAssessments] = useState<any[]>([]);
+  const [myAssessmentsLoading, setMyAssessmentsLoading] = useState(false);
+  const [myAssessmentsError, setMyAssessmentsError] = useState<string | null>(null);
   const [companyFilter, setCompanyFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
   const [coordinatorFilter, setCoordinatorFilter] = useState("");
@@ -203,23 +224,48 @@ export default function RTCPMPage() {
   ];
 
   const loadDashboard = useCallback(async () => {
-    const [parameterResponse, assessmentResponse] = await Promise.all([
-      supabase.from("rtcpm_parameter_performance").select("*").order("parameter_name", { ascending: true }),
-      supabase.from("rtcpm_assessments").select("*", { count: "exact" }).order("submitted_at", { ascending: false }),
-    ]);
-
-    // Each source is applied independently so one missing view/table doesn't hide real assessment data.
-    if (parameterResponse.error) {
-      console.error("Unable to load RTCPM parameter performance:", parameterResponse.error);
-    } else {
-      setParameterPerformance(parameterResponse.data || []);
+    setDashboardLoading(true);
+    setDashboardError(null);
+    try {
+      const [assessmentRows, rawScoreRows, parameterRows, parameterDefs] = await Promise.all([
+        fetchAllPages(() => supabase.from("rtcpm_assessments").select("*").order("submitted_at", { ascending: false, nullsFirst: false }).order("id")),
+        fetchAllPages(() => supabase.from("rtcpm_assessment_scores").select("assessment_id, parameter_id, rating").order("assessment_id").order("parameter_id")).catch((scoresError) => {
+          console.error("Unable to load RTCPM scores:", scoresError);
+          return null;
+        }),
+        fetchAllPages(() => supabase.from("rtcpm_parameter_performance").select("*").order("parameter_name", { ascending: true })).catch((parameterError) => {
+          console.error("Unable to load RTCPM parameter performance:", parameterError);
+          return [] as any[];
+        }),
+        fetchAllPages(() => supabase.from("rtcpm_assessment_parameters").select("id, parameter_code").order("id")).catch(() => [] as any[]),
+      ]);
+      const codeById = new Map(parameterDefs.map((row: any) => [row.id, String(row.parameter_code).toUpperCase()]));
+      const scoreRows = rawScoreRows ? rawScoreRows.map((row: any) => ({ ...row, parameter_code: codeById.get(row.parameter_id) })) : null;
+      setAssessments(assessmentRows);
+      setAssessmentScores(scoreRows);
+      setParameterPerformance(parameterRows);
+    } catch (error) {
+      console.error("Unable to load RTCPM assessments:", error);
+      setAssessments([]);
+      setAssessmentScores(null);
+      setDashboardError((error as { message?: string })?.message || "Unable to load RTCPM assessments.");
+    } finally {
+      setDashboardLoading(false);
     }
+  }, []);
 
-    if (assessmentResponse.error) {
-      console.error("Unable to load RTCPM assessments:", assessmentResponse.error);
-      toast.error(assessmentResponse.error.message || "Unable to load RTCPM assessments.");
-    } else {
-      setAssessments(assessmentResponse.data || []);
+  const loadMyAssessments = useCallback(async (auditorId: string) => {
+    setMyAssessmentsLoading(true);
+    setMyAssessmentsError(null);
+    try {
+      const rows = await fetchAllPages(() => supabase.from("rtcpm_assessments").select("*").eq("auditor_id", auditorId).order("created_at", { ascending: false }).order("id"));
+      setMyAssessments(rows);
+    } catch (error) {
+      console.error("Unable to load auditor assessments:", error);
+      setMyAssessments([]);
+      setMyAssessmentsError((error as { message?: string })?.message || "Unable to load your assessments.");
+    } finally {
+      setMyAssessmentsLoading(false);
     }
   }, []);
 
@@ -274,6 +320,16 @@ export default function RTCPMPage() {
     }
   }, [currentRole, loadDashboard, loadOptions, loadAuditor]);
 
+  useEffect(() => {
+    setAssessmentPage(1);
+  }, [companyFilter, locationFilter, coordinatorFilter, periodFilter, statusFilter]);
+
+  useEffect(() => {
+    if (currentRole === "AUDITOR" && auditorProfile?.id) {
+      void loadMyAssessments(auditorProfile.id);
+    }
+  }, [currentRole, auditorProfile?.id, loadMyAssessments]);
+
   const companiesById = useMemo(() => new Map(companies.map((company) => [company.id, company.company_name])), [companies]);
   const locationsById = useMemo(() => new Map(locations.map((location) => [location.id, location.location_name])), [locations]);
   const coordinatorsById = useMemo(() => new Map(coordinators.map((coordinator) => [coordinator.id, coordinator.name])), [coordinators]);
@@ -290,10 +346,14 @@ export default function RTCPMPage() {
   }, [assessments, companyFilter, coordinatorFilter, locationFilter, periodFilter, statusFilter]);
 
   const analyticsStats = useMemo(() => {
-    const submitted = filteredAssessments.filter((item) => item.status === "SUBMITTED").length;
+    const submittedItems = filteredAssessments.filter((item) => item.status === "SUBMITTED");
+    const submitted = submittedItems.length;
     const drafts = filteredAssessments.filter((item) => item.status === "DRAFT").length;
-    const totalAssessments = filteredAssessments.length || 0;
-    const averagePerformance = filteredAssessments.reduce((total, item) => total + toNumber(item.overall_percentage || item.overall_rating), 0) / (totalAssessments || 1);
+    const totalAssessments = filteredAssessments.length;
+    // Only submitted assessments carry a final score; drafts hold partial values.
+    const averagePerformance = submitted
+      ? submittedItems.reduce((total, item) => total + toNumber(item.overall_percentage ?? item.overall_rating), 0) / submitted
+      : 0;
 
     return {
       totalAssessments,
@@ -304,7 +364,14 @@ export default function RTCPMPage() {
   }, [filteredAssessments]);
 
   const parameterSummary = useMemo(() => {
+    const filteredIds = new Set(filteredAssessments.map((item) => item.id));
     return PARAMETER_META.map((parameter) => {
+      if (assessmentScores) {
+        const scores = assessmentScores.filter((item) => filteredIds.has(item.assessment_id) && String(item.parameter_code || "").toUpperCase() === parameter.code);
+        const averageRating = scores.length ? scores.reduce((total, item) => total + toNumber(item.rating), 0) / scores.length : 0;
+        return { ...parameter, averageRating, averagePercentage: averageRating * 10 };
+      }
+
       const matches = (parameterPerformance || []).filter((item) => (item.parameter_code || item.parameter || "").toUpperCase() === parameter.code);
       const averageRating = matches.length
         ? matches.reduce((total, item) => total + toNumber(item.average_rating || item.rating || 0), 0) / matches.length
@@ -319,7 +386,7 @@ export default function RTCPMPage() {
         averagePercentage,
       };
     });
-  }, [parameterPerformance]);
+  }, [assessmentScores, filteredAssessments, parameterPerformance]);
 
   const headcountVacant = useMemo(() => {
     const requirement = toNumber(assessment.headcount.requirement);
@@ -530,8 +597,8 @@ export default function RTCPMPage() {
         company_id: assessment.company_id,
         location_id: assessment.location_id,
         coordinator_id: assessment.coordinator_id,
-        assessment_start: assessment.assessment_start,
-        assessment_end: assessment.assessment_end,
+        assessment_period_start: assessment.assessment_start,
+        assessment_period_end: assessment.assessment_end,
         assessment_date: assessment.assessment_date,
         status,
         overall_rating: Number(overallRating.toFixed(2)),
@@ -609,9 +676,15 @@ export default function RTCPMPage() {
         },
       ];
 
+      const { data: parameterRows, error: parameterError } = await withRetry<any[]>(() => supabase.from("rtcpm_assessment_parameters").select("id, parameter_code"));
+      if (parameterError) throw parameterError;
+      const parameterIdByCode = new Map((parameterRows || []).map((row: any) => [String(row.parameter_code).toUpperCase(), row.id]));
+      const missingParameter = sectionRows.find((entry) => !parameterIdByCode.has(entry.parameter_code));
+      if (missingParameter) throw new Error(`Assessment parameter ${missingParameter.parameter_code} is not configured in the database.`);
+
       const scoreInserts = sectionRows.map((entry) => ({
         assessment_id: entry.assessment_id,
-        parameter_code: entry.parameter_code,
+        parameter_id: parameterIdByCode.get(entry.parameter_code),
         rating: entry.rating,
         weighted_score: entry.weighted_score,
         remarks: entry.remarks,
@@ -689,7 +762,7 @@ export default function RTCPMPage() {
       };
 
       const insertions = await Promise.all([
-        withRetry(() => supabase.from("rtcpm_assessment_scores").upsert(scoreInserts, { onConflict: "assessment_id,parameter_code" })),
+        withRetry(() => supabase.from("rtcpm_assessment_scores").upsert(scoreInserts, { onConflict: "assessment_id,parameter_id" })),
         withRetry(() => supabase.from("rtcpm_headcount").upsert([headcountPayload], { onConflict: "assessment_id" })),
         withRetry(() => supabase.from("rtcpm_joining").upsert([joiningPayload], { onConflict: "assessment_id" })),
         withRetry(() => supabase.from("rtcpm_registration").upsert([registrationPayload], { onConflict: "assessment_id" })),
@@ -705,6 +778,7 @@ export default function RTCPMPage() {
       }
 
       toast.success(status === "SUBMITTED" ? "Assessment submitted successfully." : "Draft saved successfully.");
+      void loadMyAssessments(auditorProfile.id);
       if (status === "SUBMITTED") {
         setSubmissionSuccess(true);
         setCurrentStep(steps.length - 1);
@@ -716,7 +790,7 @@ export default function RTCPMPage() {
     } finally {
       setSaving(false);
     }
-  }, [assessment, auditorProfile, currentStep, draftId, overallPercentage, overallRating]);
+  }, [assessment, auditorProfile, currentStep, draftId, loadMyAssessments, overallPercentage, overallRating]);
 
   if (currentRole === "SUPER_ADMIN") {
     return (
@@ -749,22 +823,33 @@ export default function RTCPMPage() {
             </div>
           </header>
 
+          {dashboardError ? (
+            <div role="alert" className="mt-6 flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              <span>Unable to load RTCPM assessments: {dashboardError}</span>
+              <button type="button" onClick={() => void loadDashboard()} className="font-semibold underline">Retry</button>
+            </div>
+          ) : null}
+
           <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard title="Total Assessments" value={String(analyticsStats.totalAssessments)} icon={ClipboardCheck} />
-            <StatCard title="Submitted" value={String(analyticsStats.submitted)} icon={CheckCircle2} />
-            <StatCard title="Drafts" value={String(analyticsStats.drafts)} icon={FileText} />
-            <StatCard title="Average Performance" value={`${Number(analyticsStats.averagePerformance || 0).toFixed(2)}%`} icon={ShieldCheck} />
+            <StatCard title="Total Assessments" value={dashboardLoading ? "…" : String(analyticsStats.totalAssessments)} icon={ClipboardCheck} />
+            <StatCard title="Submitted" value={dashboardLoading ? "…" : String(analyticsStats.submitted)} icon={CheckCircle2} />
+            <StatCard title="Drafts" value={dashboardLoading ? "…" : String(analyticsStats.drafts)} icon={FileText} />
+            <StatCard title="Average Performance" value={dashboardLoading ? "…" : analyticsStats.submitted ? `${Number(analyticsStats.averagePerformance).toFixed(2)}%` : "—"} icon={ShieldCheck} />
           </section>
 
           <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold dark:text-slate-100">Filters</h2>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => { setCompanyFilter(""); setLocationFilter(""); setCoordinatorFilter(""); setPeriodFilter(""); setStatusFilter(""); setAssessmentPage(1); }} className="rounded-lg px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">Clear filters</button>
+                <button type="button" onClick={() => { void loadDashboard(); void loadOptions(); }} disabled={dashboardLoading} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Refresh</button>
+              </div>
             </div>
             <div className="grid gap-3 md:grid-cols-5">
               <FilterSelect label="Company" value={companyFilter} onChange={setCompanyFilter} options={companies.map((company) => ({ value: company.id, label: company.company_name }))} />
               <FilterSelect label="Location" value={locationFilter} onChange={setLocationFilter} options={locations.filter((location) => !companyFilter || location.company_id === companyFilter).map((location) => ({ value: location.id, label: location.location_name }))} />
               <FilterSelect label="Coordinator" value={coordinatorFilter} onChange={setCoordinatorFilter} options={coordinators.filter((coordinator) => (!companyFilter || coordinator.company_id === companyFilter) && (!locationFilter || coordinator.location_id === locationFilter)).map((coordinator) => ({ value: coordinator.id, label: coordinator.name }))} />
-              <FilterSelect label="Assessment Period" value={periodFilter} onChange={setPeriodFilter} options={[...new Set((assessments || []).map((item) => item.assessment_period_start || item.assessment_period_end).filter(Boolean))].map((value) => ({ value, label: value }))} />
+              <FilterSelect label="Assessment Period" value={periodFilter} onChange={setPeriodFilter} options={[...new Set((assessments || []).map((item) => item.assessment_period_start || item.assessment_period_end).filter(Boolean))].sort().map((value) => ({ value, label: value }))} />
               <FilterSelect label="Status" value={statusFilter} onChange={setStatusFilter} options={[{ value: "SUBMITTED", label: "Submitted" }, { value: "DRAFT", label: "Draft" }]} />
             </div>
           </section>
@@ -788,12 +873,18 @@ export default function RTCPMPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(filteredAssessments || []).slice(0, 10).map((item) => (
+                    {dashboardLoading ? (
+                      <tr><td colSpan={6} className="py-8 text-center text-slate-400">Loading assessments…</td></tr>
+                    ) : null}
+                    {!dashboardLoading && !dashboardError && filteredAssessments.length === 0 ? (
+                      <tr><td colSpan={6} className="py-8 text-center text-slate-500">No assessments available for the selected filters.</td></tr>
+                    ) : null}
+                    {(filteredAssessments || []).slice((assessmentPage - 1) * 10, assessmentPage * 10).map((item) => (
                       <tr key={item.id} className="border-b border-slate-100 last:border-b-0">
                         <td className="py-3 pr-4 font-medium">{coordinatorsById.get(item.coordinator_id) || "Unknown"}</td>
                         <td className="py-3 pr-4">{companiesById.get(item.company_id) || "-"}</td>
                         <td className="py-3 pr-4">{locationsById.get(item.location_id) || "-"}</td>
-                        <td className="py-3 pr-4">{item.assessment_start && item.assessment_end ? `${item.assessment_start} to ${item.assessment_end}` : "-"}</td>
+                        <td className="py-3 pr-4">{item.assessment_period_start && item.assessment_period_end ? `${item.assessment_period_start} to ${item.assessment_period_end}` : "-"}</td>
                         <td className="py-3 pr-4">{item.overall_percentage ?? item.overall_rating ?? "-"}</td>
                         <td className="py-3 pr-4"><span className={`rounded-full px-2 py-1 text-xs font-medium ${item.status === "SUBMITTED" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{item.status || "DRAFT"}</span></td>
                       </tr>
@@ -801,6 +892,15 @@ export default function RTCPMPage() {
                   </tbody>
                 </table>
               </div>
+              {filteredAssessments.length > 10 ? (
+                <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
+                  <span>Page {assessmentPage} of {Math.ceil(filteredAssessments.length / 10)}</span>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setAssessmentPage((value) => Math.max(1, value - 1))} disabled={assessmentPage === 1} className="rounded-lg border border-slate-200 px-3 py-1.5 disabled:opacity-50 dark:border-slate-700">Previous</button>
+                    <button type="button" onClick={() => setAssessmentPage((value) => Math.min(Math.ceil(filteredAssessments.length / 10), value + 1))} disabled={assessmentPage >= Math.ceil(filteredAssessments.length / 10)} className="rounded-lg border border-slate-200 px-3 py-1.5 disabled:opacity-50 dark:border-slate-700">Next</button>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -1167,6 +1267,47 @@ export default function RTCPMPage() {
             </div>
           </div>
         </div>
+
+        <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900" aria-label="My assessments">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold dark:text-slate-100">My Assessments</h2>
+            <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+              <span>{myAssessments.length} records</span>
+              <button type="button" onClick={() => auditorProfile?.id && void loadMyAssessments(auditorProfile.id)} disabled={myAssessmentsLoading || !auditorProfile?.id} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800">Refresh</button>
+            </div>
+          </div>
+          {myAssessmentsError ? (
+            <div role="alert" className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{myAssessmentsError}</div>
+          ) : null}
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-500">
+                  <th className="pb-3 pr-4">Coordinator</th>
+                  <th className="pb-3 pr-4">Company</th>
+                  <th className="pb-3 pr-4">Location</th>
+                  <th className="pb-3 pr-4">Period</th>
+                  <th className="pb-3 pr-4">Rating</th>
+                  <th className="pb-3 pr-4">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {myAssessmentsLoading ? <tr><td colSpan={6} className="py-6 text-center text-slate-400">Loading your assessments…</td></tr> : null}
+                {!myAssessmentsLoading && !myAssessmentsError && myAssessments.length === 0 ? <tr><td colSpan={6} className="py-6 text-center text-slate-500">You have not saved or submitted any assessments yet.</td></tr> : null}
+                {myAssessments.map((item) => (
+                  <tr key={item.id} className="border-b border-slate-100 last:border-b-0">
+                    <td className="py-3 pr-4 font-medium">{coordinatorsById.get(item.coordinator_id) || "Unknown"}</td>
+                    <td className="py-3 pr-4">{companiesById.get(item.company_id) || "-"}</td>
+                    <td className="py-3 pr-4">{locationsById.get(item.location_id) || "-"}</td>
+                    <td className="py-3 pr-4">{item.assessment_period_start && item.assessment_period_end ? `${item.assessment_period_start} to ${item.assessment_period_end}` : "-"}</td>
+                    <td className="py-3 pr-4">{item.overall_percentage ?? item.overall_rating ?? "-"}</td>
+                    <td className="py-3 pr-4"><span className={`rounded-full px-2 py-1 text-xs font-medium ${item.status === "SUBMITTED" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{item.status || "DRAFT"}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </main>
   );
