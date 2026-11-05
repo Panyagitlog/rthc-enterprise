@@ -206,6 +206,14 @@ Set these variables in the root `.env` file:
 | --- | --- |
 | `VITE_SUPABASE_URL` | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase publishable/anon key |
+| `VITE_API_BASE_URL` | Optional Express API base URL; defaults to `/api` for a same-origin reverse proxy |
+
+Production sign-in uses Supabase Auth. Each account also needs an active row in the
+`users` table linked by `auth_user_id` (or by a matching profile `id`) with an
+application role. Configure Supabase row-level security for every table the app reads
+or writes; the browser anon key is public and is not an authorization boundary.
+For a separately hosted Express API, set `VITE_API_BASE_URL` to its HTTPS URL ending
+in `/api` when building the frontend.
 
 ### Optional backend
 

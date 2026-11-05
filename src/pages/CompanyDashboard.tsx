@@ -12,9 +12,10 @@ import {
   FaMoon, FaSun, FaWifi
 } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
-import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
+import { RealtimeChannel } from '@supabase/supabase-js';
 import * as XLSX from 'xlsx';
 import { useTheme } from '../lib/theme/ThemeProvider';
+import { supabase } from '../services/supabase';
 
 // Type definitions
 interface Headcount {
@@ -67,17 +68,6 @@ interface StatusConfig {
   text: string;
   Icon: React.ComponentType<{ size?: number; className?: string }>;
 }
-
-// Supabase Configuration
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-anon-key';
-
-const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  },
-});
 
 const CompanyDashboard: React.FC = () => {
   const [companies, setCompanies] = useState<CompanyWithHeadcount[]>([]);

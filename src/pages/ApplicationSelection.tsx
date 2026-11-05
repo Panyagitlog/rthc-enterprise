@@ -14,10 +14,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "../lib/router";
 import {
   getProfileFromUsersTable,
-  getStoredSession,
   normalizeRole,
   supabase,
-  clearStoredSession,
 } from "../services/supabase";
 import DMCFSLogo from "../components/brand/DMCFSLogo";
 
@@ -113,17 +111,8 @@ export default function ApplicationSelection() {
 
   useEffect(() => {
     const loadCurrentUser = async () => {
-      const storedUser = getStoredSession();
-
-      if (storedUser) {
-        setCurrentUser({
-          name: storedUser.name || storedUser.email || "User",
-          role: storedUser.role || "",
-        });
-        return;
-      }
-
-      const { data } = await supabase.auth.getSession();
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
       const authUser = data.session?.user;
 
       if (!authUser) return;
@@ -146,8 +135,11 @@ export default function ApplicationSelection() {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    clearStoredSession();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("Unable to sign out:", error);
+      return;
+    }
     navigate("/", { replace: true });
   };
 

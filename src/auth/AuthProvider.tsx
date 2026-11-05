@@ -3,8 +3,6 @@ import { createContext, useContext, useEffect, useState } from "react";
 import {
   supabase,
   isSupabaseConfigured,
-  getStoredSession,
-  clearStoredSession,
   getProfileFromUsersTable,
   normalizeRole,
 } from "../services/supabase";
@@ -18,33 +16,51 @@ export function AuthProvider({ children }: { children: any }) {
 
   useEffect(() => {
     const loadUser = async () => {
-      const storedSession = getStoredSession();
       if (!isSupabaseConfigured) {
-        if (storedSession) {
-          setUser(storedSession);
-          setProfile(storedSession);
-        } else {
-          setUser(null);
-          setProfile(null);
-        }
+        setUser(null);
+        setProfile(null);
         setLoading(false);
         return;
       }
 
-      const { data } = await supabase.auth.getUser();
+      try {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        if (!sessionData.session) {
+          setUser(null);
+          setProfile(null);
+          return;
+        }
 
-      if (data.user) {
-        setUser(data.user);
+        const { data, error } = await supabase.auth.getUser();
+        if (error) throw error;
+        if (!data.user) {
+          setUser(null);
+          setProfile(null);
+          return;
+        }
 
         const profileData = await getProfileFromUsersTable(data.user.id);
-        setProfile(profileData || { role: "SUPER_ADMIN" });
-      } else {
-        clearStoredSession();
+        if (
+          !profileData?.role ||
+          String(profileData.status ?? "").toUpperCase() !== "ACTIVE"
+        ) {
+          const { error: signOutError } = await supabase.auth.signOut();
+          if (signOutError) throw signOutError;
+          setUser(null);
+          setProfile(null);
+          return;
+        }
+
+        setUser(data.user);
+        setProfile(profileData);
+      } catch (error) {
+        console.error("Unable to load the authenticated user profile:", error);
         setUser(null);
         setProfile(null);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     loadUser();

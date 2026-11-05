@@ -3,10 +3,6 @@ import { useNavigate } from '../lib/router';
 import {
   supabase,
   isSupabaseConfigured,
-  getDemoUser,
-  setStoredSession,
-  clearStoredSession,
-  getStoredSession,
   getProfileFromUsersTable,
   normalizeRole,
 } from '../services/supabase';
@@ -514,23 +510,20 @@ export default function Login() {
     const checkSession = async () => {
       try {
         if (!isSupabaseConfigured) {
-          const storedSession = getStoredSession();
-          if (storedSession?.role) {
-            redirectBasedOnRole(storedSession.role);
-          }
+          setError('Authentication is not configured. Contact your administrator.');
           return;
         }
 
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
         if (session) {
-          const { data: profile } = await supabase
-            .from('users')
-            .select('role')
-            .eq('auth_user_id', session.user.id)
-            .single();
-
-          if (profile) {
+          const profile = await getProfileFromUsersTable(session.user.id);
+          if (profile?.role && String(profile.status ?? '').toUpperCase() === 'ACTIVE') {
             redirectBasedOnRole(profile.role);
+          } else {
+            const { error: signOutError } = await supabase.auth.signOut();
+            if (signOutError) throw signOutError;
+            setError('An active user profile is required. Contact your administrator.');
           }
         }
       } catch (err) {
@@ -557,21 +550,7 @@ export default function Login() {
 
     try {
       if (!isSupabaseConfigured) {
-        const demoUser = getDemoUser(email, password);
-
-        if (!demoUser) {
-          throw new Error('Demo login failed. Use admin@dmcfs.in, fieldofficer@dmcfs.in, area@dmcfs.in, or coordinator@dmcfs.in with password admin123.');
-        }
-
-        setStoredSession(demoUser);
-        toast.success(`Welcome back, ${demoUser.name}!`);
-        setAccessGranted(true);
-
-        setTimeout(() => {
-          redirectBasedOnRole(demoUser.role);
-        }, 400);
-
-        return;
+        throw new Error('Authentication is not configured. Contact your administrator.');
       }
 
       const { data, error: authError } = await supabase.auth.signInWithPassword({
@@ -600,7 +579,7 @@ export default function Login() {
         throw new Error('User profile not found. Contact Administrator.');
       }
 
-      if (profile.status && profile.status.toUpperCase() !== 'ACTIVE') {
+      if (String(profile.status ?? '').toUpperCase() !== 'ACTIVE') {
         await supabase.auth.signOut();
         throw new Error('Your account has been disabled. Contact Administrator.');
       }
