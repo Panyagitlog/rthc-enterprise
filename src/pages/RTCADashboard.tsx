@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, ArrowLeft, BarChart3, Building2, CalendarDays, MapPin, RefreshCw, Search, Users } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../lib/router";
 import toast from "react-hot-toast";
 // @ts-ignore
 import { supabase } from "../services/supabase";

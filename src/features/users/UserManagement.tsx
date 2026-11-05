@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../../lib/router";
 import { ArrowLeft, Ban, Building2, Check, ChevronDown, Eye, Loader2, Mail, MapPin, Pencil, Phone, Plus, RotateCcw, Search, ShieldCheck, UserRound, X } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import { isSupabaseConfigured, normalizeRole, supabase } from "../../services/supabase";

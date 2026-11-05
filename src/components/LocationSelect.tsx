@@ -1,7 +1,7 @@
 // src/pages/CoordinatorForm.tsx
 // @ts-ignore
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../lib/router";
 import {
   Search, Loader2, Building2, MapPin, Users, UserCheck, UserX,
   ArrowLeft, CheckCircle, Clock, Lock,

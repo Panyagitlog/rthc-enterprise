@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate } from "../../lib/router";
 // @ts-ignore The existing Supabase client is JavaScript and has no declaration file.
 import { isSupabaseConfigured, supabase } from "../../services/supabase";
 import { loadAuthorizedProfile, safeErrorMessage } from "./services";

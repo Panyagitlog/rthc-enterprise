@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, BarChart3, CalendarRange, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, FileText, LogOut, Save, ShieldCheck } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../../lib/router";
 import toast from "react-hot-toast";
 
 import DMCFSLogo from "../../components/brand/DMCFSLogo";

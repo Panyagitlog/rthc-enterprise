@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "../../lib/router";
 import { motion, AnimatePresence, useMotionValue } from "framer-motion";
 import {
   LayoutDashboard,

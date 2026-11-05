@@ -118,10 +118,12 @@ export default function TVMode() {
             <div>
               <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.3em] text-cyan-300">
                 <Tv className="h-5 w-5" />
-                Nationwide live updates
+                DMCFS workforce intelligence
               </div>
-              <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-4xl">All India Workforce Dashboard</h1>
-              <p className="mt-2 text-sm text-slate-400">Live headcount and scheme updates from every state</p>
+              <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-4xl">DMCFS Workforce Intelligence Platform</h1>
+              <p className="mt-2 max-w-3xl text-sm text-slate-400">
+                Real-time monitoring of headcount, company performance, scheme fulfillment, and field operations across every state and location in India.
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -161,6 +163,29 @@ export default function TVMode() {
           <SummaryCard label="Filled positions" value={stats.filled} accent="emerald" />
           <SummaryCard label="Current vacancies" value={stats.vacant} accent="amber" />
           <SummaryCard label="States / locations" value={`${new Set(rows.map((row) => row.stateName).filter((state) => state && state !== "Unknown")).size} / ${stats.locations}`} accent="violet" />
+        </section>
+
+        <section className="grid gap-4 pb-5 lg:grid-cols-[1.4fr_0.9fr]">
+          <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/5 p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">Platform overview</p>
+            <h2 className="mt-3 text-2xl font-bold text-white">About the solution</h2>
+            <p className="mt-3 text-sm leading-7 text-slate-300">
+              The DMCFS Workforce Intelligence Platform brings together real-time headcount tracking, workforce analytics,
+              operational reporting, AI-assisted support, and executive visibility into a single national dashboard. It helps
+              leadership monitor demand, understand capacity gaps, and respond quickly to workforce changes across companies,
+              locations, schemes, and coordinator networks.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-[#0d1b2b] p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-300">What this covers</p>
+            <ul className="mt-4 space-y-3 text-sm text-slate-300">
+              <li className="flex gap-3"><span className="mt-1 h-2 w-2 rounded-full bg-cyan-300" />National workforce and vacancy monitoring</li>
+              <li className="flex gap-3"><span className="mt-1 h-2 w-2 rounded-full bg-emerald-300" />Company, state, location, and scheme analytics</li>
+              <li className="flex gap-3"><span className="mt-1 h-2 w-2 rounded-full bg-violet-300" />Coordinator performance and operational visibility</li>
+              <li className="flex gap-3"><span className="mt-1 h-2 w-2 rounded-full bg-amber-300" />AI-enabled assistance for faster decisions and reporting</li>
+            </ul>
+          </div>
         </section>
 
         <section className="flex flex-1 flex-col rounded-2xl border border-white/10 bg-[#0d1b2b] shadow-2xl shadow-black/20">

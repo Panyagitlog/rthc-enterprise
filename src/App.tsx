@@ -1,11 +1,11 @@
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Moon, Sun } from "lucide-react";
+import { createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import CoordinatorForm from "./pages/CoordinatorForm";
 import AreaDashboard from "./pages/AreaDashboard";
-import Unauthorized from "./pages/Unauthorized.tsx";
+import Unauthorized from "./pages/Unauthorized";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Companies from "./pages/Companies";
@@ -26,13 +26,7 @@ import RTSRMPAccess from "./apps/rtsrmp/RTSRMPAccess";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import RoleGuard from "./auth/RoleGuard";
 import { useTheme } from "./lib/theme/ThemeProvider";
-
-
-// 🌌 Global 3D background
-// import GlobalThreeBackground from "./components/GlobalThreeBackground";
-// import CherryBlossomBackground from "./components/CherryBlossomBackground";
-// import UltimateThreeBackground from "./components/UltimateThreeBackground";
-
+import { useLocation } from "./lib/router";
 
 function GlobalThemeToggle() {
   const { isDark, toggleTheme } = useTheme();
@@ -55,229 +49,75 @@ function GlobalThemeToggle() {
   );
 }
 
-export default function App() {
+function RootLayout() {
   return (
-    <BrowserRouter>
+    <>
       <GlobalThemeToggle />
-      {/* Subtle particle field – fixed, behind everything */}
-      {/* <GlobalThreeBackground />
-       <CherryBlossomBackground /> */}
-          {/* <UltimateThreeBackground /> */}
-
-
-      <Routes>
-        {/* Public */}
-        <Route path="/" element={<Login />} />
-
-        <Route
-          path="/app-select"
-          element={
-            <ProtectedRoute>
-              <RoleGuard allowedRoles={["SUPER_ADMIN"]}>
-                <ApplicationSelection />
-              </RoleGuard>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/rtca"
-          element={
-            <ProtectedRoute>
-              <RoleGuard allowedRoles={["SUPER_ADMIN", "AREA_ADMIN"]}>
-                <RTCADashboard />
-              </RoleGuard>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/tvmode"
-          element={
-            <ProtectedRoute>
-              <RoleGuard allowedRoles={["SUPER_ADMIN"]}>
-                <TVMode />
-              </RoleGuard>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/rtcpm"
-          element={
-            <ProtectedRoute>
-              <RoleGuard allowedRoles={["SUPER_ADMIN", "AUDITOR"]}>
-                <RTCPMPage />
-              </RoleGuard>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/users"
-          element={
-            <ProtectedRoute>
-              <RoleGuard allowedRoles={["SUPER_ADMIN"]}>
-                <UserManagement />
-              </RoleGuard>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/ai-chat"
-          element={
-            <ProtectedRoute>
-              <RoleGuard allowedRoles={["SUPER_ADMIN"]}>
-                <AIChat />
-              </RoleGuard>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/rtsrmp/*"
-          element={
-            <ProtectedRoute>
-              <RTSRMPAccess>
-                <RTSRMPApp />
-              </RTSRMPAccess>
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Super Admin */}
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <RoleGuard allowedRoles={["SUPER_ADMIN"]}>
-                <Dashboard />
-              </RoleGuard>
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Area Admin */}
-        <Route
-          path="/areadashboard"
-          element={
-            <ProtectedRoute>
-              <RoleGuard allowedRoles={["AREA_ADMIN"]}>
-                <AreaDashboard />
-              </RoleGuard>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
-          }
-        />
-
-        
-        <Route
-          path="/coordinator/profile"
-          element={
-            
-            <ProtectedRoute>
-              <RoleGuard allowedRoles={["COORDINATOR"]}>
-              <Profile />
-              </RoleGuard>
-            </ProtectedRoute>
-
-          }
-        />
-
-        <Route
-          path="/settings"
-          element={
-            <ProtectedRoute>
-              <Settings />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/companies"
-          element={
-            <ProtectedRoute>
-              <Companies />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/locations"
-          element={
-            <ProtectedRoute>
-              <Locations />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/coordinators"
-          element={
-            <ProtectedRoute>
-              <Coordinators />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/Analytics"
-          element={
-            <ProtectedRoute>
-              <Analytics />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/Headcount"
-          element={
-            <ProtectedRoute>
-              <Headcount />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Coordinator */}
-        <Route
-          path="/coordinator"
-          element={
-            <ProtectedRoute>
-              <RoleGuard allowedRoles={["COORDINATOR"]}>
-                <CoordinatorForm />
-              </RoleGuard>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/reports"
-          element={
-            <ProtectedRoute>
-              <RoleGuard allowedRoles={"SUPER_ADMIN"}>
-                <CompanyDashboard />
-              </RoleGuard>
-            </ProtectedRoute>
-          }
-        />
-
-
-
-        {/* Unauthorized */}
-        <Route
-          path="/unauthorized"
-          element={<Unauthorized />}
-        />
-      </Routes>
-    </BrowserRouter>
+      <Outlet />
+    </>
   );
+}
+
+function protectedPage(
+  Page: React.ComponentType,
+  allowedRoles?: string | string[],
+) {
+  return function ProtectedPage() {
+    const page = allowedRoles ? (
+      <RoleGuard allowedRoles={allowedRoles}>
+        <Page />
+      </RoleGuard>
+    ) : (
+      <Page />
+    );
+
+    return <ProtectedRoute>{page}</ProtectedRoute>;
+  };
+}
+
+function rtsrmpPage() {
+  return (
+    <ProtectedRoute>
+      <RTSRMPAccess>
+        <RTSRMPApp />
+      </RTSRMPAccess>
+    </ProtectedRoute>
+  );
+}
+
+const rootRoute = createRootRoute({ component: RootLayout });
+
+const routeTree = rootRoute.addChildren([
+  createRoute({ getParentRoute: () => rootRoute, path: "/", component: Login }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/app-select", component: protectedPage(ApplicationSelection, ["SUPER_ADMIN"]) }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/rtca", component: protectedPage(RTCADashboard, ["SUPER_ADMIN", "AREA_ADMIN"]) }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/tvmode", component: protectedPage(TVMode, ["SUPER_ADMIN"]) }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/rtcpm", component: protectedPage(RTCPMPage, ["SUPER_ADMIN", "AUDITOR"]) }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/users", component: protectedPage(UserManagement, ["SUPER_ADMIN"]) }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/ai-chat", component: protectedPage(AIChat, ["SUPER_ADMIN"]) }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/rtsrmp", component: rtsrmpPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/rtsrmp/*", component: rtsrmpPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/dashboard", component: protectedPage(Dashboard, ["SUPER_ADMIN"]) }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/areadashboard", component: protectedPage(AreaDashboard, ["AREA_ADMIN"]) }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/profile", component: protectedPage(Profile) }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/coordinator/profile", component: protectedPage(Profile, ["COORDINATOR"]) }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/settings", component: protectedPage(Settings) }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/companies", component: protectedPage(Companies) }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/locations", component: protectedPage(Locations) }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/coordinators", component: protectedPage(Coordinators) }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/Analytics", component: protectedPage(Analytics) }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/Headcount", component: protectedPage(Headcount) }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/coordinator", component: protectedPage(CoordinatorForm, ["COORDINATOR"]) }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/reports",
+    component: protectedPage(CompanyDashboard, "SUPER_ADMIN"),
+  }),
+  createRoute({ getParentRoute: () => rootRoute, path: "/unauthorized", component: Unauthorized }),
+]);
+
+const router = createRouter({ routeTree });
+
+export default function App() {
+  return <RouterProvider router={router} />;
 }

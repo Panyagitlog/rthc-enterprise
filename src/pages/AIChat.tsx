@@ -18,7 +18,7 @@
   X,
 } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../lib/router";
 import DMCFSLogo from "../components/brand/DMCFSLogo";
 import { supabase } from "../services/supabase";
 

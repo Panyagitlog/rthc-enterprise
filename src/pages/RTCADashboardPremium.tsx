@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, ArrowLeft, BarChart3, Building2, CheckCircle2, Download, FileSpreadsheet, Filter, LogOut, MapPin, RefreshCw, Search, ShieldCheck, Users, X } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import * as XLSX from "xlsx";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../lib/router";
 import toast from "react-hot-toast";
 // @ts-ignore
 import { supabase } from "../services/supabase";

@@ -24,7 +24,7 @@ import {
   X,
 } from "lucide-react";
 import ExcelJS from "exceljs";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "../../lib/router";
 import DMCFSLogo from "../../components/brand/DMCFSLogo";
 import { useRTSRMPProfile } from "./profile-context";
 import {

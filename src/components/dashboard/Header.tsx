@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "../../lib/router";
 import { Menu, Search, Bell, Moon, Sun, RefreshCw, ChevronDown, Wifi, WifiOff, Sparkles, X, Check, Globe, Settings, User, LogOut } from "lucide-react";
 import { format } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";

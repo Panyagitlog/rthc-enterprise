@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "../lib/router";
 import { ShieldX, Home, Mail, AlertCircle, Zap } from "lucide-react";
 
 export default function Unauthorized() {

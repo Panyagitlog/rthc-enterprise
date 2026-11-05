@@ -1,6 +1,6 @@
 // src/pages/Analytics.tsx
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../lib/router";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Printer, Building2, MapPin, Users,

@@ -1,6 +1,6 @@
 // src/pages/Reports.tsx
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../lib/router";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Search, RefreshCw, Download, FileSpreadsheet,

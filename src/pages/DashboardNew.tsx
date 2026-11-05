@@ -1,6 +1,6 @@
 // src/pages/Dashboard.tsx
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link } from "../lib/router";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line

@@ -1,6 +1,6 @@
 // src/pages/Profile.tsx
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../lib/router";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, User, Mail, Phone, Building2, MapPin, Shield,

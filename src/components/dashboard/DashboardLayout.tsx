@@ -1,6 +1,6 @@
 // src/components/layout/DashboardLayout.tsx
 import { useState, useEffect, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../../lib/router";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 // @ts-ignore

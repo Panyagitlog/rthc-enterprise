@@ -1,6 +1,6 @@
 // src/pages/Dashboard.tsx
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../lib/router";
 import toast from "react-hot-toast";
 // @ts-ignore
 import { supabase } from "../services/supabase";

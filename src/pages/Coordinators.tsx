@@ -1,6 +1,6 @@
 // src/pages/Coordinators.tsx
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../lib/router";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Search, Plus, Edit, Trash2,

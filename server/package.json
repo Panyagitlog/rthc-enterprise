@@ -1,7 +1,7 @@
 {
-  "name": "server",
+  "name": "dmcfs-workforce-intelligence-platform-server",
   "version": "1.0.0",
-  "description": "RTHC Backend",
+  "description": "DMCFS Workforce Intelligence Platform Backend",
   "main": "server.ts",
   "type": "commonjs",
   "scripts": {

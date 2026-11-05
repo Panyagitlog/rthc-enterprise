@@ -1,11 +1,11 @@
 <div align="center">
   <img src="./public/dmcfs.png" alt="DMCFS" width="300" />
-  <h1>DMCFS Workforce Operations Suite</h1>
-  <p><strong>One platform. Four applications. Complete workforce visibility.</strong></p>
+  <h1>DMCFS Workforce Intelligence Platform</h1>
+  <p><strong>One enterprise platform for workforce visibility, analytics, operations, and AI-powered decision support.</strong></p>
   <p>
-    An enterprise workforce management and analytics platform for tracking headcount,
-    understanding client performance, assessing coordinator operations, and accessing
-    an AI assistant.
+    A modern workforce intelligence suite for monitoring headcount, analyzing client
+    and location performance, evaluating coordinator operations, and enabling faster
+    action across nationwide programs.
   </p>
   <p>
     <img src="https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white" alt="React 19" />
@@ -121,7 +121,7 @@ browser-exposed `VITE_` variables.
 
 | Area | Stack |
 | --- | --- |
-| Web application | React 19, TypeScript, Vite |
+| Web application | React 19, TypeScript, Vite, TanStack Router |
 | UI and motion | Tailwind CSS, Radix UI, Framer Motion, Lucide |
 | Charts and exports | Recharts, `xlsx` |
 | Data and authentication | Supabase (Postgres, Auth, Realtime) |
